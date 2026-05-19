@@ -1,7 +1,13 @@
 {
+ "name": "anonymous-layer",
+ "version": "0.0.0-alpha",
+ "description": "Experimental anonymity-network protocol. Pre-spec, pre-audit. Do not deploy.",
  "type": "module",
+ "license": "AGPL-3.0-or-later",
+ "author": "Anonymous Gratis <admin@anon.gratis>",
  "scripts": {
-  "tests": "npm install && npx mocha tests.mjs"
+  "test": "npx mocha tests.mjs",
+  "tests": "npm test"
  },
  "devDependencies": {
   "chai": "^6.2.1",

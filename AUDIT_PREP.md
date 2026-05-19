@@ -193,8 +193,14 @@ be recovered from swap/core dumps. Add `.fill(0)` on dispose.
   so test runs are non-deterministic.
 - `router/tests.mjs` — races four servers on port 0 with a 12 s wall-clock
   deadline; flaky on slow CI.
-- `package.json` — script is named `"tests"` (plural); standard Node tooling
-  expects `"test"` so `npm test` works.
+- ~~`package.json` — script is named `"tests"` (plural); standard Node tooling
+  expects `"test"`~~. **Fixed** — `npm test` now works; `npm run tests` kept
+  as an alias for the README.
+- **Dev-dependency advisories (informational):** `npm audit` reports high-
+  severity issues in mocha's transitive deps (`serialize-javascript`,
+  `minimatch`, `diff`). These do not ship to production. CI audits
+  `--omit=dev` for failure-gating and runs a separate informational dev-dep
+  audit. Re-evaluate when mocha publishes a release with a clean tree.
 
 ---
 

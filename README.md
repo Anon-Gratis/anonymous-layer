@@ -1,5 +1,16 @@
 # ANONYMOUS LAYER
 
+> **⚠️ STATUS: PRE-AUDIT, PRE-SPEC, EXPERIMENTAL. DO NOT DEPLOY.**
+>
+> This software has not been audited, does not yet have a written protocol
+> specification, and contains hand-rolled cryptographic constructions that
+> are not yet considered safe. **It must not be used by journalists,
+> dissidents, or anyone whose physical safety depends on anonymity.** For
+> safety-critical use cases today, use [Tor](https://torproject.org). The
+> current production-readiness roadmap and the list of known critical
+> issues are in [`AUDIT_PREP.md`](./AUDIT_PREP.md). For vulnerability
+> disclosure, see [`SECURITY.md`](./SECURITY.md).
+
 ## ABOUT
 
 This project comes from the distrust towards the Tor project and the utter lack of serious competitors to it. This is an in-progress implementation of a protocol that is easy to inspect, audit and develop independent implementations of it, so you do not need to trust my software to participate in this anonymity network (as you're able to write your own). If you too are distrustful of Tor, consider supporting this project. Reach out to me for more details.
@@ -72,5 +83,10 @@ Z0dIah5qQ8BPMs82fSA=
 ## TESTS
 
 ```
-npm run tests
+npm test
 ```
+
+## LICENSE
+
+This project is licensed under the GNU Affero General Public License v3.0 or
+later. See [`LICENSE`](./LICENSE) for the full text.

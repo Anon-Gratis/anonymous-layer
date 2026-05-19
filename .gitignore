@@ -1,1 +1,20 @@
 node_modules/
+
+# Build / coverage / local artefacts
+coverage/
+dist/
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Private key material must never be committed
+*.key
+*.pem
+*.asc
+secrets/

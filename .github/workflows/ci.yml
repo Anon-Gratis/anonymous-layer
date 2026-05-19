@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  audit:
+    name: npm audit (prod, high+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      # Production dependencies only. Dev-deps (mocha and its transitive
+      # tree) currently carry advisories tracked in AUDIT_PREP.md; those
+      # do not ship to users but should be re-evaluated when mocha cuts
+      # a release with clean deps.
+      - name: Audit production dependencies (high+)
+        run: npm audit --audit-level=high --omit=dev
+      # Informational only — surface dev-dep advisories without failing.
+      - name: Audit dev dependencies (informational)
+        run: npm audit --audit-level=high || true
