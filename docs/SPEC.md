@@ -31,7 +31,7 @@
 8. [Forwarding model](#8-forwarding-model)
 9. [Error handling](#9-error-handling)
 10. [Protocol versioning](#10-protocol-versioning)
-11. [Security considerations](#11-security-considerations) — *(TODO, depends on Phase 3 threat model)*
+11. [Security considerations](#11-security-considerations)
 12. [References](#12-references)
 13. [Appendix A: Design decisions ledger](#13-appendix-a-design-decisions-ledger)
 
@@ -78,9 +78,9 @@ This document does **not** specify:
 
 ### 1.3. Threat model summary
 
-A complete threat model lives in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md)
-(forthcoming, Phase 3). The summary, against which all design choices in
-this document are made, is:
+A complete threat model lives in [`THREAT_MODEL.md`](THREAT_MODEL.md).
+The summary, against which all design choices in this document are
+made, is:
 
 - **In scope.** A *passive* network adversary observing packet metadata
   on links they control, including arbitrary fractions of the network's
@@ -1153,9 +1153,64 @@ fallback.
 
 ## 11. Security considerations
 
-> **Status: TODO (depends on Phase 3 threat model).** Will mirror the
-> threat model document and describe, for each adversary class, which
-> primitives and protocol mechanisms defend against which capabilities.
+This section is a short pointer into the companion threat-model
+document, which is the canonical source for adversary classes,
+claimed properties, and the defence-by-mechanism map. Implementers
+SHOULD treat that document as authoritative; only the per-section
+cross-references below are repeated here for browseability.
+
+### 11.1. Companion document
+
+The full threat model is in [`THREAT_MODEL.md`](THREAT_MODEL.md).
+It enumerates adversary classes A through I, the anonymity properties
+claimed against each, and the residual risks. Future revisions of
+this specification MUST re-validate § 11 against any changes in
+that document.
+
+### 11.2. Mechanism cross-reference
+
+| Mechanism in this document | Threat-model section |
+|---|---|
+| Fresh ephemeral X25519 per packet (§ 5.3) | `THREAT_MODEL.md` § 5.1 |
+| Sender identity inside AEAD (§ 5.4) | `THREAT_MODEL.md` § 5.2 |
+| Fixed-size buckets (§ 5.1) | `THREAT_MODEL.md` § 5.3 |
+| AEAD over outer header (§ 5.5) | `THREAT_MODEL.md` § 5.4 |
+| Zero-padding inside AEAD (§ 5.4) | `THREAT_MODEL.md` § 5.5 |
+| Silent-drop + constant-time discipline (§ 5.7, § 9) | `THREAT_MODEL.md` § 5.6 |
+| Replay-window log (§ 5.6) | `THREAT_MODEL.md` § 5.7 |
+| `FORWARD` rate limits (§ 6.5.1) | `THREAT_MODEL.md` § 5.8 |
+| Eviction policy (§ 7.4) | `THREAT_MODEL.md` § 5.9 |
+| CSPRNG-only randomness (§ 3.1) | `THREAT_MODEL.md` § 5.10 |
+
+### 11.3. Out-of-scope adversaries
+
+The protocol explicitly does **not** defend against:
+
+- A global passive adversary observing every link simultaneously
+  (`THREAT_MODEL.md` class C).
+- A compromised endpoint (`THREAT_MODEL.md` class G).
+- A coercer of operators or users (`THREAT_MODEL.md` class H);
+  forward secrecy of ephemeral keys is the partial mitigation.
+- An application-layer fingerprinter on top of the network
+  (`THREAT_MODEL.md` class I).
+
+### 11.4. Known residual risks
+
+Even when every mechanism is implemented correctly, the following
+residual risks remain. They are described in detail in
+`THREAT_MODEL.md` § 6 and summarised here:
+
+- Intersection attacks against long-lived users.
+- Predecessor / first-hop attack against a recurring `FORWARD` user.
+- Sybil-amplified peer-table flooding (no protocol-level anti-Sybil
+  in v0.1).
+- Aggregate-volume correlation (bucketing is per-packet only).
+- Implementation-level side channels (cache, GC, memory allocation).
+
+Audit engagements SHOULD include these residuals on the test plan;
+they are anticipated and not expected to be classified as defects of
+the v0.1 protocol *per se*, but rather as known limitations to be
+addressed in v0.2 or by deployment configuration.
 
 ---
 
