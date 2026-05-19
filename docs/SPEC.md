@@ -27,9 +27,9 @@
 4. [Node identity](#4-node-identity)
 5. [Wire format](#5-wire-format)
 6. [Coordination packets](#6-coordination-packets)
-7. [Peer discovery and bootstrap](#7-peer-discovery-and-bootstrap) — *(TODO)*
-8. [Forwarding model](#8-forwarding-model) — *(TODO)*
-9. [Error handling](#9-error-handling) — *(TODO)*
+7. [Peer discovery and bootstrap](#7-peer-discovery-and-bootstrap)
+8. [Forwarding model](#8-forwarding-model)
+9. [Error handling](#9-error-handling)
 10. [Protocol versioning](#10-protocol-versioning)
 11. [Security considerations](#11-security-considerations) — *(TODO, depends on Phase 3 threat model)*
 12. [References](#12-references)
@@ -858,14 +858,250 @@ Receivers MUST:
 
 ## 7. Peer discovery and bootstrap
 
-> **Status: TODO.** Anticipated content:
->
-> - Static seed-list format (file, signing, distribution).
-> - Gossip-mode peer-announcement semantics (replaces the current
->   750 ms continuousAnnouncePeer loop).
-> - Anti-Sybil rate limits.
-> - Bootstrap from out-of-band (PGP-signed seed manifests, dropbox-
->   style discovery hidden behind PGP).
+Peer discovery in v0.1 is gossip-based. There is no consensus
+mechanism, no directory authority, and no on-line "trust graph"
+beyond the manual seed list each node starts from.
+
+### 7.1. Seed list
+
+Every implementation MUST ship with, or accept on startup, a
+**seed list** of zero or more bootstrap peers. The seed list is the
+out-of-band root of trust for an otherwise-empty peer table.
+
+A seed list is a sequence of seed records:
+
+```
+   +---------------------------------------------+
+   |                                             |
+   | identity public key             (32 bytes)  |
+   |                                             |
+   +---------------------------------------------+
+   |                                             |
+   | key certificate                (105 bytes)  |
+   |   (format defined in § 4.4)                 |
+   |                                             |
+   +---------------------------------------------+
+   | transport count                  (1 byte)   |
+   +---------------------------------------------+
+   | transports                      (variable)  |
+   |   (transport-record format, § 6.4.1)        |
+   +---------------------------------------------+
+```
+
+The encoding for distribution is implementation-defined (PEM-style
+armored block, JSON document, raw binary) but the on-disk byte
+sequence above MUST be the canonical form for hashing or signing.
+
+A seed list distributed publicly SHOULD be signed by a long-lived
+"anchor" key whose public component is published widely out of band
+(e.g., on multiple websites, in printed media, in PGP-signed
+release announcements). The anchor signature is **out of scope** for
+this protocol document; it is a deployment concern.
+
+> **Design decision (v0.1):** No on-protocol seed-list signature
+> format is specified. Distributing the seed list and rotating the
+> anchor key is treated as a deployment concern (analogous to Tor's
+> hard-coded directory authorities). A future revision may add
+> protocol-level anchor signatures if cross-implementation seed-list
+> interchange becomes common.
+
+### 7.2. Bootstrap procedure
+
+On startup, an implementation MUST:
+
+1. Load the seed list.
+2. Verify each seed record's key certificate per § 4.4. Drop records
+   that fail.
+3. Open transport connections to a sample of `min(K, seed_count)`
+   seeds, where `K` is implementation-defined (RECOMMENDED `K = 8`).
+4. Send each connected seed a `KEY_CERTIFICATE` packet (§ 6.6) so the
+   seed can announce *this* node to its peers.
+
+If the seed list is empty and no peers can be loaded from local
+state, the implementation MUST refuse to send any application
+traffic and SHOULD emit a local error indicating no bootstrap
+candidates were available.
+
+### 7.3. Gossip propagation
+
+Once a node has at least one connected peer, it MUST periodically
+emit `ANNOUNCE_PEER` packets (§ 6.4) to advertise *other* peers in
+its table. The default cadence is:
+
+- One `ANNOUNCE_PEER` per peer per **30 seconds**.
+- Subject of the announcement: a uniformly random selection from the
+  receiver's *not-currently-connected* peer set, with selection
+  weighted to prefer peers that the recipient is least likely to have
+  seen recently. The "least likely" estimate is an
+  implementation-local heuristic.
+
+A node MUST NOT announce itself to a peer that already has it in its
+peer table; nodes are responsible for tracking which peers they have
+announced themselves to.
+
+> **Design decision (v0.1):** The pre-spec implementation announced
+> at 750 ms intervals, which produced ~1.3 announcements per second
+> per peer and dominated bandwidth on idle networks. The 30 s
+> default scales reasonably to ~1000-node networks; larger networks
+> are out of scope for v0.1.
+
+### 7.4. Peer eviction
+
+Peers are evicted from the local peer table when any of these holds:
+
+- Their key certificate has expired.
+- Their identity has been observed to send a malformed packet that
+  reached AEAD-decryption-success but failed inner validation
+  (§ 5.7 step 7 or 8). Evict on first such occurrence.
+- They have not been reachable on any of their advertised
+  transports for at least **1 hour** of attempted contact.
+- An operator command explicitly removes them.
+
+Implementations MUST NOT evict peers solely for outer-header-failed
+packets (§ 5.7 steps 1–5), because those failures can be induced by
+any on-path adversary and form a trivial blocklist-poisoning
+vector.
+
+> **Design decision (v0.1):** Eviction policy distinguishes
+> failures that *require* possession of the recipient's onion key
+> (post-AEAD) from those that don't (pre-AEAD). Only the former
+> are attributable to the named sender.
+
+### 7.5. Anti-Sybil considerations
+
+v0.1 has **no** protocol-level anti-Sybil mechanism. Operators are
+expected to size their seed lists and peer-table caps such that
+Sybil populations cannot dominate any honest node's gossip view.
+
+> **Design decision (v0.1):** Defer anti-Sybil to v0.2. Proof-of-
+> work, vouching graphs, and stake-based anti-Sybil are all
+> distinguishably costly to operators and users; v0.1 keeps the
+> protocol surface small enough that an audit can scope to it
+> meaningfully.
+
+---
+
+## 8. Forwarding model
+
+### 8.1. One-hop forwarding semantics
+
+A v0.1 anonymous-layer packet is delivered in **at most two hops**:
+
+- A direct packet: sender → recipient. The packet's
+  `recipient_prefix` (§ 5.2) identifies the recipient; the AEAD is
+  decryptable only by the recipient's onion key.
+- A forwarded packet: sender → forwarder → recipient. The packet
+  reaching the forwarder is itself a one-hop packet whose recipient
+  is the forwarder; its inner plaintext is a `FORWARD` (§ 6.5)
+  carrying a complete inner packet whose recipient is the next hop.
+
+In both cases, each *hop* terminates a complete AEAD-protected
+packet. Forwarders never decrypt the inner packet, and senders never
+construct a packet that traverses more than two hops in v0.1.
+
+### 8.2. What v0.1 does not provide
+
+v0.1 forwarding **does not**:
+
+- Provide circuit-level anonymity (Tor's onion routing).
+- Mix multiple senders' traffic across many hops to defeat
+  intersection attacks.
+- Defend against a forwarder that is also the recipient (it
+  trivially knows it received a `FORWARD` to itself).
+- Defend against an active adversary who controls the forwarder and
+  observes its uplink.
+
+The anonymity provided by `FORWARD` in v0.1 is the modest property
+that an *on-path observer of the sender's uplink* does not learn
+the ultimate recipient. This is useful for cases such as: a
+journalist behind a passive ISP eavesdropper publishing a message to
+a target whose IP must not be tied to the journalist's traffic.
+
+> **Design decision (v0.1):** Calling out the limits of one-hop
+> forwarding is part of the spec to prevent overclaiming. Multi-hop
+> circuits are v0.2 and will be specified with their own threat-
+> model section.
+
+### 8.3. Exit policy
+
+Forwarders MAY publish, via the `transports` list in their own
+`KEY_CERTIFICATE` (§ 6.6), an **exit-policy capability bit**
+indicating that they accept `FORWARD` packets whose ultimate
+destination is outside the anonymous-layer network (e.g., to a
+plain-IP HTTP server). The exact bit assignment and policy-
+description format are deferred to v0.2.
+
+A v0.1 forwarder MUST treat unknown next-hop transport types as
+"do not forward there" and drop the `FORWARD` packet silently.
+
+---
+
+## 9. Error handling
+
+### 9.1. Silent-drop discipline
+
+Every failure on the receive path (§ 5.7), regardless of cause,
+results in **silent packet drop**. Specifically:
+
+- **No error packet** is emitted in response to a failure.
+- **No ICMP-style** notification (or equivalent at the transport
+  layer) is sent.
+- **No log message** that is observable on the wire (e.g., via
+  timing of subsequent unrelated packets) distinguishes between
+  failure causes.
+- **No connection close** is performed in response to a single
+  failed packet. Repeated failures MAY trigger transport-level
+  policy (§ 9.3) but a single failure MUST NOT.
+
+> **Design decision (v0.1):** Distinguishable error responses are
+> the most common active-probing side channel in deployed network
+> protocols. Silent drop is the strongest single guarantee a
+> network-anonymity protocol can offer at the packet level.
+
+### 9.2. Constant-time accept / reject
+
+Implementations MUST take the same wall-clock time, within
+measurement noise of the host platform, to process a packet
+regardless of whether it ultimately succeeds or fails.
+
+This is achievable by:
+
+1. Performing every step in § 5.7 even on early failures (e.g., a
+   bad outer-header byte does not skip the AEAD decryption); or
+2. Adding a constant-time blinding delay to the failure path.
+
+Approach (1) is preferred where the additional work is cheap (the
+AEAD step is the dominant cost; doing it once on every packet is
+acceptable).
+
+### 9.3. Transport-level policy
+
+While the *packet* layer drops silently, the *transport* layer (e.g.,
+the WebSocket connection underneath) MAY apply rate-limiting and
+disconnect policies against peers that send pathological volumes of
+malformed packets. The thresholds are implementation-defined.
+RECOMMENDED defaults:
+
+- **Per-peer:** if more than 64 malformed packets are received from
+  a single transport connection within 60 seconds, the connection
+  MAY be closed without notice.
+- **Per-source-IP:** the same threshold applies to all transport
+  connections originating from the same network-layer source IP, if
+  observable.
+
+> **Design decision (v0.1):** Transport-level disconnection is
+> intentionally separated from packet-level processing. The two
+> have different observability properties: a transport disconnect
+> is visible to the peer (they see TCP RST or WebSocket close), but
+> only after a sustained pattern, not from a single probe.
+
+### 9.4. Local logging
+
+Implementations MAY log packet processing failures to a *local*
+log. Logs SHOULD distinguish failure causes (bad version,
+AEAD failure, padding failure, replay, …) for operator debugging.
+Logs MUST NOT be transmitted over the wire by the protocol itself.
+Operator-grade log shipping is out of scope for this document.
 
 ---
 
@@ -987,3 +1223,10 @@ are ISO 8601.
 | 16 | 2026-05-19 | `FORWARD` packets are rate-limited per source ephemeral key (32/min), per destination fingerprint (64/min), and globally (4096/min). | Closes the open-amplification primitive flagged in `AUDIT_PREP.md` H3. Conservative limits subject to Phase 3 / Phase 5 refinement. | Reversible (limits are parameters). |
 | 17 | 2026-05-19 | A forwarder MUST NOT modify the inner packet (no re-encryption, no re-padding). The inner packet is opaque ciphertext to the forwarder. | Preserves end-to-end AEAD authentication; ensures that an honest forwarder cannot accidentally compromise sender anonymity by altering observable properties. | Permanent property. |
 | 18 | 2026-05-19 | `ANNOUNCE_PEER` and `KEY_CERTIFICATE` are split. The latter ships the raw `idPk`; the former assumes the receiver already knows it. | Ed25519 signatures don't embed the public key. Rather than inline `idPk` in every announcement (a 32-byte cost on every gossip packet), it is published once via `KEY_CERTIFICATE` and cached. A future revision may merge them. | Reversible (can merge in v1 minor revision via type registry). |
+| 19 | 2026-05-19 | Seed-list signing is out of scope for v0.1; treated as a deployment concern. | Mirrors Tor's hard-coded directory authorities. Adds protocol-level seed signing only if cross-implementation seed interchange becomes common. | Reversible (additive in v0.2). |
+| 20 | 2026-05-19 | Gossip cadence default: one `ANNOUNCE_PEER` per peer per 30 s. | Pre-spec 750 ms cadence saturated idle networks at >1 pps per peer. 30 s scales to ~1000-node networks. Larger networks are out of scope for v0.1. | Reversible (cadence is a parameter). |
+| 21 | 2026-05-19 | Peer eviction distinguishes pre-AEAD failures (attributable to any on-path adversary) from post-AEAD failures (attributable to the named sender). Only the latter cause eviction. | Pre-AEAD eviction is a trivial blocklist-poisoning vector. | Permanent property. |
+| 22 | 2026-05-19 | No protocol-level anti-Sybil in v0.1; deferred to v0.2. | Proof-of-work / vouching / stake all have distinct operator and user costs; choosing one prematurely locks in a deployment story. | Reversible (additive in v0.2). |
+| 23 | 2026-05-19 | v0.1 forwarding is one-hop only (at most two AEAD-protected hops total). Tor-style circuits are v0.2. | Spec is small enough to audit. Honest about the limited anonymity v0.1 provides (sender-uplink-observer protection only). | Reversible (additive in v0.2). |
+| 24 | 2026-05-19 | Silent-drop discipline is normative for every receive-path failure. No error packets, no ICMP-style replies, no observable timing differences. | Distinguishable error responses are the most common active-probing side channel. | Permanent property. |
+| 25 | 2026-05-19 | Transport-level rate-limit / disconnect policy is *separate* from packet-level silent-drop, with different observability. Per-peer ~64 malformed packets / 60 s threshold. | Single-probe attacks must be undetectable; sustained abuse may be visibly mitigated. | Reversible (thresholds are parameters). |
