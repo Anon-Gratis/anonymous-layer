@@ -253,8 +253,18 @@ const TABLE_MULTIPLES_0xEF = Uint8Array.from([
 // HELPERS FOR GENERATION OF KEYS                                     //
 ////////////////////////////////////////////////////////////////////////
 
-const KEY_EXPANDED = new Uint32Array(40);
-const KEY_FULL = new Uint32Array(4 * 256);
+// Each call needs its own state buffers; module-level mutable state would
+// cross-contaminate concurrent encrypt/decrypt calls in any async server.
+// Callers that drive the chain modes allocate one state and reuse it across
+// every block in the chain to avoid reallocating the 4096-byte KEY_FULL.
+const createState128 = () => Object.freeze({
+    vectorME:    new Uint8Array(4 * 4),
+    vectorMO:    new Uint8Array(4 * 4),
+    vectorM:     new Uint8Array(4 * 8),
+    vectorS:     new Uint8Array(4 * 4),
+    keyExpanded: new Uint32Array(40),
+    keyFull:     new Uint32Array(4 * 256),
+});
 
 const KEY_FULL_INDEX = (a, b) => ((b << 2) + a) | 0;
 
@@ -562,11 +572,6 @@ const KEY_FULL_BITS128 = (list, keyFull) => {
 ////////////////////////////////////////////////////////////////////////
 // ENCRYPTION AND DECRYPTION COMMON TO ALL KEY SIZES                  //
 ////////////////////////////////////////////////////////////////////////
-
-const VECTOR_ME = new Uint8Array(4 * 4);
-const VECTOR_MO = new Uint8Array(4 * 4);
-const VECTOR_M = new Uint8Array(4 * 8);
-const VECTOR_S = new Uint8Array(4 * 4);
 
 const COMMON_VECTOR_SPLITTING = (selectorK, key, vectorME, vectorMO) => {
 
@@ -899,87 +904,57 @@ const COMMON_DECRYPT = (keyExpanded, keyFull, textCipher, textPlain) => {
 // ENCRYPTION AND DECRYPTION GIVEN SPECIFIC KEY SIZES                 //
 ////////////////////////////////////////////////////////////////////////
 
-export const encrypt128 = (key, textPlain, textCipher) => {
+// Fills `state` with the round keys and key-dependent S-boxes for `key`.
+// Kept private so the chain modes can amortize one schedule per chain call
+// without exposing the state shape to outside callers.
+const SCHEDULE_BITS128 = (state, key) => {
 
     COMMON_VECTOR_SPLITTING(
         TWOFISH_BITS128_K,
         key,
-        VECTOR_ME,
-        VECTOR_MO,
+        state.vectorME,
+        state.vectorMO,
     );
 
     KEY_EXPANSION_BITS128(
-        VECTOR_ME,
-        VECTOR_MO,
-        KEY_EXPANDED,
+        state.vectorME,
+        state.vectorMO,
+        state.keyExpanded,
     );
 
     COMMON_VECTOR_JOINING(
         TWOFISH_BITS128_K,
-        VECTOR_ME,
-        VECTOR_MO,
-        VECTOR_M,
+        state.vectorME,
+        state.vectorMO,
+        state.vectorM,
     );
 
     KEY_DEPENDENT_SBOX(
         TWOFISH_BITS128_K,
-        VECTOR_M,
-        VECTOR_S,
+        state.vectorM,
+        state.vectorS,
     );
 
     KEY_FULL_BITS128(
-        VECTOR_S,
-        KEY_FULL,
+        state.vectorS,
+        state.keyFull,
     );
 
-    COMMON_ENCRYPT(
-        KEY_EXPANDED,
-        KEY_FULL,
-        textPlain,
-        textCipher,
-    );
+};
+
+export const encrypt128 = (key, textPlain, textCipher) => {
+
+    const state = createState128();
+    SCHEDULE_BITS128(state, key);
+    COMMON_ENCRYPT(state.keyExpanded, state.keyFull, textPlain, textCipher);
 
 };
 
 export const decrypt128 = (key, textCipher, textPlain) => {
 
-    COMMON_VECTOR_SPLITTING(
-        TWOFISH_BITS128_K,
-        key,
-        VECTOR_ME,
-        VECTOR_MO,
-    );
-
-    KEY_EXPANSION_BITS128(
-        VECTOR_ME,
-        VECTOR_MO,
-        KEY_EXPANDED,
-    );
-
-    COMMON_VECTOR_JOINING(
-        TWOFISH_BITS128_K,
-        VECTOR_ME,
-        VECTOR_MO,
-        VECTOR_M,
-    );
-
-    KEY_DEPENDENT_SBOX(
-        TWOFISH_BITS128_K,
-        VECTOR_M,
-        VECTOR_S,
-    );
-
-    KEY_FULL_BITS128(
-        VECTOR_S,
-        KEY_FULL,
-    );
-
-    COMMON_DECRYPT(
-        KEY_EXPANDED,
-        KEY_FULL,
-        textCipher,
-        textPlain,
-    );
+    const state = createState128();
+    SCHEDULE_BITS128(state, key);
+    COMMON_DECRYPT(state.keyExpanded, state.keyFull, textCipher, textPlain);
 
 };
 
@@ -1008,6 +983,7 @@ export const encrypt128Chain = (key, textPlain, textCipher) => {
     };
 
     const keyBlock = new Uint8Array(LENGTH_KEY);
+    const state = createState128();
 
     const limitA = textPlain.length;
     const limitB = textCipher.length;
@@ -1027,7 +1003,8 @@ export const encrypt128Chain = (key, textPlain, textCipher) => {
 
         }
 
-        encrypt128(keyBlock, chunkPlain, chunkCipher);
+        SCHEDULE_BITS128(state, keyBlock);
+        COMMON_ENCRYPT(state.keyExpanded, state.keyFull, chunkPlain, chunkCipher);
         nextVector();
 
         offsetA = (offsetA + LENGTH_BLOCK) | 0;
@@ -1062,6 +1039,7 @@ export const decrypt128Chain = (key, textCipher, textPlain) => {
     };
 
     const keyBlock = new Uint8Array(LENGTH_KEY);
+    const state = createState128();
 
     const limitA = textCipher.length;
     const limitB = textPlain.length;
@@ -1081,7 +1059,8 @@ export const decrypt128Chain = (key, textCipher, textPlain) => {
 
         }
 
-        decrypt128(keyBlock, chunkCipher, chunkPlain);
+        SCHEDULE_BITS128(state, keyBlock);
+        COMMON_DECRYPT(state.keyExpanded, state.keyFull, chunkCipher, chunkPlain);
         nextVector();
 
         offsetA = (offsetA + LENGTH_BLOCK) | 0;
