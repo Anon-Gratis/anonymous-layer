@@ -25,14 +25,15 @@
 2. [Document conventions](#2-document-conventions)
 3. [Cryptographic primitives](#3-cryptographic-primitives)
 4. [Node identity](#4-node-identity)
-5. [Wire format](#5-wire-format) — *(TODO)*
-6. [Coordination packets](#6-coordination-packets) — *(TODO)*
+5. [Wire format](#5-wire-format)
+6. [Coordination packets](#6-coordination-packets)
 7. [Peer discovery and bootstrap](#7-peer-discovery-and-bootstrap) — *(TODO)*
 8. [Forwarding model](#8-forwarding-model) — *(TODO)*
 9. [Error handling](#9-error-handling) — *(TODO)*
-10. [Protocol versioning](#10-protocol-versioning) — *(TODO)*
+10. [Protocol versioning](#10-protocol-versioning)
 11. [Security considerations](#11-security-considerations) — *(TODO, depends on Phase 3 threat model)*
 12. [References](#12-references)
+13. [Appendix A: Design decisions ledger](#13-appendix-a-design-decisions-ledger)
 
 ---
 
@@ -218,12 +219,12 @@ implementation MUST take affirmative measures to prevent it. The
 prescribed nonce derivation is given in § 6 (forthcoming).
 
 > **Design decision (v0.1):** ChaCha20-Poly1305 (RFC 8439) was selected
-> over XChaCha20-Poly1305 because nonces in this protocol are derived
-> deterministically from a counter and per-direction key (§ 6),
-> eliminating the need for a 24-byte random nonce. Implementations MAY
-> additionally support XChaCha20-Poly1305 for application-layer payload
-> encryption but the on-wire packet construction MUST use the standard
-> 12-byte nonce.
+> over XChaCha20-Poly1305 because each packet uses a single-use session
+> key derived from a fresh ephemeral X25519 keypair (§ 5), making the
+> 12-byte nonce space comfortably collision-free under any plausible
+> deployment scale. In v0.1, nonces MUST be drawn uniformly at random
+> from `RAND(12)`; deterministic nonces derived from a session counter
+> are reserved for the v0.2 multi-hop session mechanism.
 
 ### 3.4. Hashing: Blake2b-256
 
@@ -250,14 +251,14 @@ literal ASCII byte string with no terminator):
 
 | Purpose | `info` |
 |---|---|
-| Per-packet session key (direction A→B) | `anon-layer/v1/session/AtoB` |
-| Per-packet session key (direction B→A) | `anon-layer/v1/session/BtoA` |
-| Per-packet nonce derivation seed | `anon-layer/v1/nonce` |
+| Per-packet AEAD key (v0.1, single-use) | `anon-layer/v1/aead` |
+| Per-packet session key, direction A→B (v0.2, reserved) | `anon-layer/v1/session/AtoB` |
+| Per-packet session key, direction B→A (v0.2, reserved) | `anon-layer/v1/session/BtoA` |
 
-> **Design decision (v0.1):** Directional separation of session keys is
-> baked into the KDF labels rather than into the protocol message
-> structure, so a single X25519 exchange yields two independent session
-> keys without an additional exchange.
+> **Design decision (v0.1):** Each packet derives a single-use AEAD key
+> via `HKDF-SHA-256(KX(eph_sk, onion_pk), "anon-layer/v1/aead", 32)`. The
+> directional labels are reserved for the v0.2 session protocol but are
+> not used in v0.1 — a v0.1 packet is a one-shot, one-direction transmission.
 
 ### 3.6. Signatures: Ed25519
 
@@ -377,36 +378,481 @@ key certificates, which are signed by the identity key.
 
 ## 5. Wire format
 
-> **Status: TODO (next chunk).** This section will define the on-wire
-> packet structure. Anticipated content:
->
-> - 16-byte fixed packet header (version, type, length, recipient
->   fingerprint prefix, sender ephemeral pubkey commitment).
-> - 32-byte sender ephemeral X25519 public key.
-> - 12-byte nonce.
-> - Variable-length AEAD ciphertext.
-> - 16-byte Poly1305 tag.
->
-> Open design questions:
->
-> - **Fixed vs. variable packet size.** Fixed size leaks less timing /
->   length information but wastes bandwidth on small messages.
->   Recommended: padding to fixed buckets (256 / 1024 / 4096 bytes).
-> - **Replay protection.** Per-(sender, recipient) sequence number, or
->   a windowed nonce log?
-> - **Versioning placement.** First byte (proposed) or first 4-byte
->   magic?
+### 5.1. Packet sizes
+
+Every packet transmitted on the wire MUST have a total length of
+exactly one of:
+
+| Bucket | Total bytes | Symbolic name |
+|---:|---:|---|
+| 0x01 | 256 | `BUCKET_SMALL` |
+| 0x02 | 1024 | `BUCKET_MEDIUM` |
+| 0x03 | 4096 | `BUCKET_LARGE` |
+
+A packet whose on-wire length is not exactly one of these three values
+MUST be rejected by the receiver before any cryptographic processing.
+
+> **Design decision (v0.1):** Fixed-size buckets are used (rather than
+> variable-length packets) to prevent passive observers from
+> correlating message lengths across hops, and to defeat trivial
+> traffic-analysis side channels such as keystroke-timing inference.
+> Three buckets balance bandwidth overhead against length-leakage:
+> short coordination and chat messages use 256, larger documents up to
+> ~4 KB go into 1024, and bulk transfers up to ~16 KB use 4096.
+> Messages exceeding `BUCKET_LARGE`'s plaintext capacity are fragmented
+> at the application layer (§ 6, forthcoming).
+
+### 5.2. Packet structure
+
+A packet has two logical regions: an **outer header** which is
+transmitted in cleartext on the wire and an **AEAD-protected body** in
+which the outer header is authenticated as associated data.
+
+```
+   +---------------------------------------------+
+   | version                          (1 byte)   |
+   +---------------------------------------------+
+   | bucket                           (1 byte)   |
+   +---------------------------------------------+
+   | recipient fingerprint prefix     (8 bytes)  |
+   +---------------------------------------------+
+   |                                             |
+   | sender ephemeral X25519 public  (32 bytes)  |
+   |                                             |
+   +---------------------------------------------+
+   | nonce                           (12 bytes)  |
+   +---------------------------------------------+ <-- 54 bytes outer header
+   |                                             |
+   | AEAD body                                   |
+   |   (encrypted + authenticated inner)         |
+   |                       (bucket - 70 bytes)   |
+   |                                             |
+   +---------------------------------------------+
+   | Poly1305 tag                    (16 bytes)  |
+   +---------------------------------------------+
+```
+
+Total: exactly `bucket` bytes.
+
+| Field | Length | Notes |
+|---|---:|---|
+| `version` | 1 | This document specifies `0x01`. |
+| `bucket` | 1 | One of `0x01`, `0x02`, `0x03`. |
+| `recipient fingerprint prefix` | 8 | First 8 bytes of `H(recipient idPk)`. Used for fast local filtering only; the full fingerprint is verified during decryption. |
+| `sender ephemeral X25519 public key` | 32 | Fresh per packet. Single-use. MUST be discarded after the packet is sent. |
+| `nonce` | 12 | `RAND(12)`. Random and unique within `(sender_ephemeral_pk, nonce)` space (collision-free by construction of the ephemeral key). |
+| `AEAD body` | bucket − 70 | ChaCha20-Poly1305 ciphertext of the inner plaintext (§ 5.4). |
+| `tag` | 16 | Poly1305 tag, computed over `outer_header ‖ ciphertext`. |
+
+### 5.3. AEAD key derivation
+
+For a packet sent to a recipient whose onion public key is `onionPk`:
+
+1. The sender generates an ephemeral X25519 keypair `(ephSk, ephPk)` with
+   `RAND(32)` for `ephSk` (clamped per RFC 7748 § 5).
+2. The sender computes `shared = KX(ephSk, onionPk)`.
+3. If `shared` is the all-zero 32-byte string, the sender MUST abort and
+   regenerate the ephemeral keypair.
+4. The AEAD key is `K = KDF(shared, "anon-layer/v1/aead", 32)`.
+5. The sender computes `nonce = RAND(12)`.
+
+The recipient, receiving a packet, computes the inverse:
+
+1. `shared = KX(onionSk, ephPk)`.
+2. If `shared` is the all-zero string, the packet MUST be silently dropped.
+3. `K = KDF(shared, "anon-layer/v1/aead", 32)`.
+4. The AEAD is decrypted with `K`, `nonce` from the outer header, and
+   `aad` from the outer header (§ 5.5).
+
+### 5.4. Inner plaintext layout
+
+After AEAD decryption, the inner plaintext has length `bucket − 70` and
+the following layout:
+
+```
+   +---------------------------------------------+
+   | packet type                      (1 byte)   |
+   +---------------------------------------------+
+   | real length                      (2 bytes)  |
+   +---------------------------------------------+
+   |                                             |
+   | sender identity fingerprint     (32 bytes)  |
+   |                                             |
+   +---------------------------------------------+
+   |                                             |
+   | payload                  (real_length bytes)|
+   |                                             |
+   +---------------------------------------------+
+   |                                             |
+   | padding   (bucket - 70 - 35 - real_length)  |
+   |   all zero bytes                            |
+   |                                             |
+   +---------------------------------------------+
+```
+
+| Field | Length | Notes |
+|---|---:|---|
+| `packet type` | 1 | One of the values defined in § 6. |
+| `real length` | 2 | Big-endian unsigned 16-bit count of payload bytes. MUST be ≤ `bucket − 70 − 35`. |
+| `sender identity fingerprint` | 32 | The full `H(idPk)` of the sender. **This identifies the sender to the recipient inside the AEAD; it is not visible to network observers.** |
+| `payload` | real_length | Type-dependent (§ 6). |
+| `padding` | rest | Zero bytes. The receiver MUST verify that every byte of the padding region is exactly `0x00` and MUST reject the packet otherwise. |
+
+The padding region is mandatory and its all-zero contents are
+authenticated by the AEAD tag; this prevents an active adversary from
+truncating or extending the apparent payload.
+
+> **Design decision (v0.1):** The sender's identity fingerprint is
+> placed *inside* the AEAD so that only the recipient learns who sent
+> the packet. Forwarders (in the future v0.2 multi-hop construction)
+> will only see the outer header.
+
+> **Design decision (v0.1):** The sender's identity is conveyed by
+> fingerprint only, not by a signature inside the packet. The sender's
+> identity is **claimed** at the network layer but not proved; an
+> application that requires non-repudiation MUST add a signature in the
+> payload itself. This keeps v0.1 simple and avoids the cost (~64 bytes
+> per packet) of an Ed25519 signature.
+
+### 5.5. Authenticated associated data (AAD)
+
+The AAD passed to `AEAD_ENC` and `AEAD_DEC` is the **entire outer
+header**, exactly as transmitted on the wire, concatenated in field
+order:
+
+```
+aad = version ‖ bucket ‖ recipient_prefix ‖ ephPk ‖ nonce
+```
+
+Length: **54 bytes**.
+
+Any modification by an active attacker to any cleartext outer-header
+byte causes AEAD verification to fail.
+
+### 5.6. Replay protection
+
+Each node MUST maintain a **sliding-window log** of packets it has
+recently accepted. The log key is the pair
+`(sender_ephemeral_pk, nonce)`, derived from the outer header of each
+accepted packet.
+
+Window semantics:
+
+- **Time window.** Entries are retained for at least **300 seconds**
+  (5 minutes) and MAY be retained longer.
+- **Size bound.** Implementations MUST retain at least the **most
+  recent 8192** entries even if doing so requires extending the time
+  window. They MAY retain more.
+- **Eviction.** Implementations MAY evict entries older than the time
+  window before the size bound is reached.
+
+On receipt of a packet whose AEAD verification has succeeded, the
+receiver:
+
+1. Looks up `(ephPk, nonce)` in the replay log.
+2. If found, the packet is a replay; it MUST be silently dropped.
+3. If not found, the packet is accepted; `(ephPk, nonce)` is inserted
+   into the log.
+
+> **Design decision (v0.1):** Because each packet has a *fresh*
+> ephemeral public key (§ 5.3), `ephPk` alone is already a unique
+> single-use token in honest traffic. The window log thus primarily
+> defends against an active adversary who *retransmits* a captured
+> packet. The 5-minute / 8192-entry minima are chosen so a node sized
+> for ~30 packets/sec retains at least 4-5 minutes of history;
+> high-volume nodes will retain proportionally less time but never
+> fewer than 8192 entries.
+
+> **Design decision (v0.1):** The log is per-recipient (i.e., per
+> node), not per-(sender, recipient) pair. Because the sender is
+> network-layer anonymous (§ 5.4), no stable sender identity is
+> available at the layer that performs replay rejection.
+
+### 5.7. Receive-path order of operations
+
+A receiver processing a single inbound packet MUST perform these
+checks in this order, aborting on the first failure:
+
+1. **Length check.** Packet length is exactly 256, 1024, or 4096 bytes.
+   Otherwise drop.
+2. **Version check.** `version == 0x01`. Otherwise drop.
+3. **Bucket check.** `bucket` matches the actual length. Otherwise drop.
+4. **Fingerprint-prefix filter (advisory).** The first 8 bytes of
+   `H(my idPk)` match `recipient_prefix`. If not, drop without further
+   work. This is an optimisation, not a security check.
+5. **AEAD decrypt.** Compute `shared`, derive `K`, decrypt. On any
+   failure (including all-zero `shared` or Poly1305 tag mismatch),
+   drop silently.
+6. **Padding check.** Every byte of the padding region is `0x00`.
+   Otherwise drop.
+7. **`real_length` sanity.** `real_length ≤ bucket − 70 − 35`.
+   Otherwise drop.
+8. **Replay check.** `(ephPk, nonce)` is not in the replay log.
+   Otherwise drop.
+9. **Insert into replay log.** Add `(ephPk, nonce)`.
+10. **Dispatch by `packet type`.** Hand the payload to the handler
+    for the type, defined in § 6.
+
+All failure dispositions in this list MUST be **silent**: the receiver
+MUST NOT emit a response that distinguishes between failure causes,
+nor measurably alter its timing. (Practical guidance: in implementations
+where AEAD failure and padding failure take noticeably different time,
+extend both paths to constant time using a constant-time `OR` mask
+before the final accept/reject decision.)
+
+### 5.8. Send-path order of operations
+
+A sender constructing an outbound packet:
+
+1. Select `bucket` such that the inner plaintext fits:
+   `bucket = smallest b ∈ {256, 1024, 4096} such that 70 + 35 + real_length ≤ b`.
+   If even `BUCKET_LARGE` is insufficient, fragment at the application
+   layer.
+2. Generate `(ephSk, ephPk)` per § 5.3.
+3. Compute `shared = KX(ephSk, recipient onionPk)`. Abort + retry on
+   all-zero.
+4. Derive `K`, generate `nonce = RAND(12)`.
+5. Construct the inner plaintext with the sender's identity fingerprint
+   and zero-padding (§ 5.4).
+6. Construct AAD per § 5.5.
+7. Compute `(ciphertext, tag) = AEAD_ENC(K, nonce, aad, inner_plaintext)`.
+8. Concatenate `aad ‖ ciphertext ‖ tag` and transmit.
+9. Discard `ephSk`, `shared`, `K`, and `inner_plaintext` (zeroize).
 
 ---
 
 ## 6. Coordination packets
 
-> **Status: TODO.** This section will replace the existing
-> `TYPE_COORDINATION_*` enumeration. Each type will be defined with:
->
-> - Exact payload layout.
-> - Pre- and post-conditions for processing.
-> - Allowed transitions in any associated state machine.
+This section defines the set of packet types valid in v0.1 and the
+layout of each type's payload. The `packet type` byte in the inner
+plaintext (§ 5.4) selects which subsection applies.
+
+### 6.1. Type registry
+
+| Code | Name | Direction | Purpose | § |
+|---:|---|---|---|---|
+| `0x00` | `RESERVED` | — | Reserved; never valid on the wire. Receivers MUST drop. | 6.2 |
+| `0x01` | `DATA` | sender → recipient | Carry an opaque application-layer payload to the recipient. | 6.3 |
+| `0x02` | `ANNOUNCE_PEER` | sender → recipient | Inform the recipient that the named peer exists, with a key certificate. | 6.4 |
+| `0x03` | `FORWARD` | sender → forwarder | Ask the forwarder to deliver the enclosed inner packet to a named next-hop. | 6.5 |
+| `0x04` | `KEY_CERTIFICATE` | sender → recipient | Publish the sender's current key certificate. | 6.6 |
+| `0x05`–`0x7F` | reserved (v0.1) | — | Reserved for v0.1 extensions; receivers MUST drop. | — |
+| `0x80`–`0xFF` | reserved (≥ v0.2) | — | Reserved for future major / minor versions. | — |
+
+> **Design decision (v0.1):** Only four packet types are exposed in
+> v0.1. The pre-spec `FASTER_LINK_{PLEAD,GRANT,TRADE,CHECK}` and
+> `REDIRECT_STATIC` types were bandwidth-negotiation and connection-
+> migration mechanisms that depend on session state; they are
+> deferred to v0.2 along with the multi-hop / circuit construction.
+
+### 6.2. `RESERVED` (`0x00`)
+
+Never valid. A receiver MUST drop any packet whose decrypted inner
+`packet type` byte is `0x00`. This reservation prevents accidental
+processing of zero-initialised buffers.
+
+### 6.3. `DATA` (`0x01`)
+
+Payload layout (within the `payload` region of § 5.4):
+
+```
+   +---------------------------------------------+
+   | conversation tag                (16 bytes)  |
+   +---------------------------------------------+
+   | sequence number                  (8 bytes)  |
+   +---------------------------------------------+
+   |                                             |
+   | opaque application bytes (real_length - 24) |
+   |                                             |
+   +---------------------------------------------+
+```
+
+| Field | Length | Notes |
+|---|---:|---|
+| `conversation tag` | 16 | Application-defined opaque identifier. Used by the recipient's application layer to demultiplex concurrent conversations from the same sender. SHOULD be derived from a Blake2b-256 of an application-layer conversation key, truncated to 16 bytes, so it is unlinkable to network-layer identity. |
+| `sequence number` | 8 | Big-endian unsigned 64-bit. Application-defined ordering within a conversation. v0.1 does not impose semantics; the application MAY use it for ordering, fragmentation indices, or ignore it (set to `0x00…0`). |
+| application bytes | rest | Opaque to v0.1. End-to-end encryption above this layer is the application's responsibility. |
+
+The minimum valid `real_length` for `DATA` is **24** (the two header
+fields with zero application bytes). A receiver MUST drop a `DATA`
+packet whose `real_length` is less than 24.
+
+> **Design decision (v0.1):** `DATA` packets are opaque at the network
+> layer. The network does **not** parse, route, or modify the
+> application bytes. This is the layering boundary between the
+> anonymity network and whatever protocol (chat, file transfer,
+> HTTP-over-anon) rides on top of it.
+
+### 6.4. `ANNOUNCE_PEER` (`0x02`)
+
+Payload layout:
+
+```
+   +---------------------------------------------+
+   | announced fingerprint           (32 bytes)  |
+   +---------------------------------------------+
+   |                                             |
+   | announced key certificate      (105 bytes)  |
+   |   (format defined in § 4.4)                 |
+   |                                             |
+   +---------------------------------------------+
+   | announced transport count        (1 byte)   |
+   +---------------------------------------------+
+   |                                             |
+   | announced transports         (variable)     |
+   |   (format defined in § 6.4.1, one per entry)|
+   |                                             |
+   +---------------------------------------------+
+```
+
+Minimum `real_length`: `32 + 105 + 1 = 138` bytes (zero transports).
+
+Receivers MUST:
+
+1. Verify that `H(idPk_of_cert) == announced_fingerprint`. The
+   identity public key is recovered from the key certificate by
+   verifying the signature in § 4.4 and extracting the signing key.
+   *(Note: Ed25519 signatures alone do not embed the public key;
+   implementations are REQUIRED to learn `idPk` out of band or from a
+   previous `KEY_CERTIFICATE` packet. See § 6.6.)*
+2. Verify the key certificate per § 4.4.
+3. Drop the packet on any failure.
+
+A successfully verified `ANNOUNCE_PEER` packet results in the
+announced node being added to the receiver's peer table with the
+listed transports.
+
+#### 6.4.1. Transport record format
+
+Each transport record is variable-length:
+
+```
+   +---------------------------------------------+
+   | transport type                   (1 byte)   |
+   +---------------------------------------------+
+   | transport length                 (1 byte)   |
+   +---------------------------------------------+
+   | transport address     (transport length B)  |
+   +---------------------------------------------+
+```
+
+| Type | Name | Length | Address format |
+|---:|---|---:|---|
+| `0x01` | `WEBSOCKET_IPV4` | 6 | 4-byte IPv4 + 2-byte big-endian port |
+| `0x02` | `WEBSOCKET_IPV6` | 18 | 16-byte IPv6 + 2-byte big-endian port |
+| `0x03`–`0xFF` | reserved | — | Receivers MUST skip unknown transport types using the `transport length` byte. |
+
+> **Design decision (v0.1):** Length-prefixed transport records permit
+> forward-compatible addition of new transports (Tor onion, QUIC,
+> Bluetooth Mesh, etc.) without bumping the protocol version.
+
+### 6.5. `FORWARD` (`0x03`)
+
+Asks the recipient (acting as a forwarder) to deliver an enclosed
+inner packet to a named next-hop. The inner packet is itself a
+fully-formed anonymous-layer packet per § 5, and is opaque to the
+forwarder beyond its size and routing prefix.
+
+Payload layout:
+
+```
+   +---------------------------------------------+
+   |                                             |
+   | next-hop fingerprint            (32 bytes)  |
+   |                                             |
+   +---------------------------------------------+
+   | next-hop transport count         (1 byte)   |
+   +---------------------------------------------+
+   | next-hop transports             (variable)  |
+   |   (transport-record format, § 6.4.1)        |
+   +---------------------------------------------+
+   |                                             |
+   | inner packet                    (variable)  |
+   |   (one of: 256, 1024, or 4096 bytes)        |
+   |                                             |
+   +---------------------------------------------+
+```
+
+Receivers MUST:
+
+1. Confirm the inner packet's length is exactly one of the three
+   buckets (§ 5.1). Otherwise drop.
+2. Confirm the inner packet's `recipient_prefix` (its byte offsets
+   2..10) matches the first 8 bytes of the supplied next-hop
+   fingerprint. Otherwise drop.
+3. Apply rate-limit accounting (§ 6.5.1) and drop if the limit is
+   exceeded.
+4. Establish a transport connection to the next-hop using one of the
+   supplied transport records (selected at the implementation's
+   discretion).
+5. Transmit the inner packet verbatim.
+6. Discard all state associated with this `FORWARD` request.
+
+A forwarder MUST NOT modify the inner packet in any way, including
+re-encrypting or re-padding it.
+
+#### 6.5.1. Forward-rate limiting
+
+To prevent the open-amplification primitive flagged in `AUDIT_PREP.md`
+finding H3, every node that processes `FORWARD` packets MUST enforce:
+
+- A **per-source rate limit** of at most 32 `FORWARD` requests per
+  source `ephPk` per 60 seconds. (This is loose because each
+  legitimate packet uses a fresh `ephPk`; in practice, "per source"
+  is "per recently-seen ephemeral key," not per identity.)
+- A **per-destination rate limit** of at most 64 `FORWARD` requests
+  per next-hop fingerprint per 60 seconds.
+- A **global rate limit** of at most 4096 `FORWARD` requests per
+  60 seconds.
+
+Implementations MAY enforce stricter limits. Implementations MAY
+expose these limits as operator configuration. A `FORWARD` packet
+that exceeds any limit is dropped silently per § 5.7 disposition.
+
+> **Design decision (v0.1):** The pre-spec implementation's forward
+> handler had no rate limiting and accepted any next-hop the packet
+> named — a textbook amplification primitive. The v0.1 limits above
+> are intentionally conservative; we expect a Phase 5 hardening pass
+> and the Phase 3 threat model to refine them.
+
+### 6.6. `KEY_CERTIFICATE` (`0x04`)
+
+Publishes the sender's identity public key together with their current
+key certificate. This is the bootstrap channel by which a recipient
+learns the `idPk` needed to verify subsequent `ANNOUNCE_PEER` packets
+(§ 6.4) about other nodes whose identity key is unfamiliar.
+
+Payload layout:
+
+```
+   +---------------------------------------------+
+   |                                             |
+   | identity public key             (32 bytes)  |
+   |                                             |
+   +---------------------------------------------+
+   |                                             |
+   | key certificate                (105 bytes)  |
+   |   (format defined in § 4.4)                 |
+   |                                             |
+   +---------------------------------------------+
+```
+
+Exact `real_length`: **137** bytes. A receiver MUST drop any
+`KEY_CERTIFICATE` packet whose `real_length` is not 137.
+
+Receivers MUST:
+
+1. Verify that the inner `sender identity fingerprint` (§ 5.4) equals
+   `H(identity public key)`. Otherwise drop.
+2. Verify the key certificate per § 4.4. Otherwise drop.
+3. Cache the `(idPk, key certificate)` pair indexed by
+   `H(idPk)` for use in future `ANNOUNCE_PEER` validation.
+
+> **Design decision (v0.1):** Ed25519 raw signatures do not embed the
+> signing public key, so the receiver must learn it through an
+> explicit channel. `KEY_CERTIFICATE` is that channel. A future
+> revision may inline the `idPk` directly into the certificate to
+> remove this two-message bootstrap.
 
 ---
 
@@ -444,9 +890,47 @@ key certificates, which are signed by the identity key.
 
 ## 10. Protocol versioning
 
-> **Status: TODO.** v0.1 packets use version byte `0x01`. Forward-
-> compatibility rules (must-ignore unknown extensions, must-fail
-> unknown packet types in v1) will be specified here.
+### 10.1. Version byte
+
+The first byte of every packet (§ 5.2) is the protocol version. This
+document specifies version `0x01`.
+
+A packet whose version byte does not match a version the implementation
+supports MUST be dropped silently at step 2 of the receive-path checks
+(§ 5.7). No error packet, ICMP-style reply, or distinguishable timing
+behaviour is emitted.
+
+### 10.2. Compatibility rules
+
+- **Major-version boundary.** Versions `0x01` through `0x0F` reserve
+  the low nibble for backward-compatible revisions and the high nibble
+  for major versions. Major versions are not interoperable. A node
+  supporting only `0x01` MUST drop `0x02..0xFF` packets without
+  processing.
+- **Minor-version semantics.** Within a major version, packet *fields*
+  defined in this document MUST NOT change interpretation; new packet
+  *types* MAY be added (§ 6 reserves a registry for this). A node MUST
+  treat unknown packet types as if the packet had been dropped at step
+  10 of § 5.7 — silently, no response.
+- **Bucket additions.** New `bucket` values (e.g., `0x04` for 16384
+  bytes) MAY be introduced in a future minor version. A v0.1 node
+  receiving a packet with an unknown `bucket` value MUST drop it at
+  step 3 of § 5.7.
+
+### 10.3. Negotiation
+
+Version `0x01` performs **no** explicit version negotiation. Nodes
+emit packets at the highest version they support; recipients drop
+packets at versions they do not support. Future versions MAY introduce
+a capability-advertisement coordination packet to enable graceful
+fallback.
+
+> **Design decision (v0.1):** No version-negotiation handshake. The
+> network layer is one-shot per packet (§ 1.1); a handshake would add
+> round trips that defeat the latency advantage of one-shot delivery.
+> Senders are expected to learn a recipient's supported version out of
+> band (e.g., from the recipient's key certificate's extensions in a
+> future revision).
 
 ---
 
@@ -473,3 +957,33 @@ key certificates, which are signed by the identity key.
 - [RFC 7748][rfc7748] — Curve25519 / X25519.
 - [RFC 8032][rfc8032] — Ed25519.
 - [RFC 8439][rfc8439] — ChaCha20-Poly1305.
+
+---
+
+## 13. Appendix A: Design decisions ledger
+
+Each row records a non-obvious decision made while drafting this
+specification. New entries are appended at the bottom; existing entries
+are never deleted (use a follow-on entry to record a reversal). Dates
+are ISO 8601.
+
+| # | Date | Decision | Rationale | Reversibility |
+|---:|---|---|---|---|
+| 1 | 2026-05-19 | Clean break from the pre-spec on-wire format. | The pre-spec implementation has 6 critical defects (`AUDIT_PREP.md` § 3) and zero deployed users; preserving compatibility would lock in those defects. | Permanent. |
+| 2 | 2026-05-19 | Cryptographic primitives are exclusively libsodium-equivalent IETF standards: X25519, ChaCha20-Poly1305, Blake2b-256, HKDF-SHA-256, Ed25519. | All five primitives are constant-time, widely implemented, and have decades of academic review. None are bespoke. | Reversible only by a major version. |
+| 3 | 2026-05-19 | All randomness for cryptographic values MUST come from the OS CSPRNG (`crypto.randomFillSync` in Node.js). | The pre-spec code used `Math.random()`-seeded custom PRNG — critical finding C1 in `AUDIT_PREP.md`. | Permanent (universally true property of secure protocols). |
+| 4 | 2026-05-19 | One-hop forwarding only in v0.1; multi-hop / circuits are v0.2. | Multi-hop construction is a substantial design problem (cell sizing, traffic-analysis padding, per-hop key derivation). Shipping the v0.1 foundation first lets us iterate on the multi-hop layer separately. | Reversible (v0.2 is additive). |
+| 5 | 2026-05-19 | Node identity is split into a long-term Ed25519 identity key and a 7-day-rotated X25519 onion key, bound by a 105-byte key certificate. | Standard hygiene: limit damage from any single key compromise. Identity-key compromise still requires a full identity rotation, but onion-key compromise expires within a week. | Reversible (rotation period is a parameter). |
+| 6 | 2026-05-19 | Wire format uses three fixed-size buckets (256 / 1024 / 4096 bytes). | Defends against length-based traffic correlation across hops; balances bandwidth overhead against length-leakage. Tor's 514-byte cell precedent. | Reversible (additional buckets are forward-compatible per § 10.2). |
+| 7 | 2026-05-19 | Each packet uses a fresh ephemeral X25519 keypair; the AEAD key is `HKDF(KX(eph_sk, onion_pk), "anon-layer/v1/aead", 32)`. Nonce is `RAND(12)`. | Single-use keys remove nonce-reuse risk entirely. Forward-secrecy per packet, not per session. | Reversible (v0.2 session protocol layered on top). |
+| 8 | 2026-05-19 | The sender's identity fingerprint appears *inside* the AEAD, not in the outer header. | Network observers must not learn who sent a packet; only the recipient learns. The sender is "network-layer anonymous" to everyone except the recipient. | Permanent property. |
+| 9 | 2026-05-19 | No sender signature inside the network-layer packet. Applications that need non-repudiation sign at the payload layer. | Saves 64 bytes per packet and avoids implying a security property the network layer doesn't enforce (the AEAD only proves *someone* with a working ephemeral key sent the packet, not *which* claimed-fingerprint sender). | Reversible (signed packet types can be added in § 6). |
+| 10 | 2026-05-19 | Replay-protection log is per-recipient and keyed by `(ephPk, nonce)`. Minimum 8192 entries and ≥ 300 s retention. | Network-layer-anonymous senders cannot be used as a log key; the ephemeral key is already a unique single-use token in honest traffic. | Reversible (bounds are parameters). |
+| 11 | 2026-05-19 | All receive-path failures are silent and constant-time. No error packets, no ICMP-style replies, no observable timing differences. | Distinguishable error responses are a primary side channel for active probing. Silent drop is the strongest guarantee. | Permanent. |
+| 12 | 2026-05-19 | Version byte is the first byte of every packet, single-byte. Major / minor split into high / low nibble. | Single-byte parsing is the cheapest possible filter; nibble-split allows backward-compatible minor extensions. | Reversible by major version. |
+| 13 | 2026-05-19 | No explicit version-negotiation handshake. Receivers silently drop unsupported versions. | One-shot semantics preclude a round-trip handshake; future revisions can layer capability discovery on top via a coordination packet. | Reversible (future versions can add). |
+| 14 | 2026-05-19 | v0.1 packet-type registry has four types: `DATA` (0x01), `ANNOUNCE_PEER` (0x02), `FORWARD` (0x03), `KEY_CERTIFICATE` (0x04). | Smallest set that supports one-hop messaging, gossip peer discovery, one-hop forwarding, and key-material bootstrap. Pre-spec `FASTER_LINK_*` and `REDIRECT_STATIC` types deferred to v0.2 (session protocol). | Reversible (registry is extensible per § 10.2). |
+| 15 | 2026-05-19 | `DATA` payloads are opaque to the network layer. End-to-end authentication / encryption is the application's responsibility. | Clean layering boundary. Lets the same network carry chat, file transfer, and other application protocols without protocol-version churn. | Permanent property. |
+| 16 | 2026-05-19 | `FORWARD` packets are rate-limited per source ephemeral key (32/min), per destination fingerprint (64/min), and globally (4096/min). | Closes the open-amplification primitive flagged in `AUDIT_PREP.md` H3. Conservative limits subject to Phase 3 / Phase 5 refinement. | Reversible (limits are parameters). |
+| 17 | 2026-05-19 | A forwarder MUST NOT modify the inner packet (no re-encryption, no re-padding). The inner packet is opaque ciphertext to the forwarder. | Preserves end-to-end AEAD authentication; ensures that an honest forwarder cannot accidentally compromise sender anonymity by altering observable properties. | Permanent property. |
+| 18 | 2026-05-19 | `ANNOUNCE_PEER` and `KEY_CERTIFICATE` are split. The latter ships the raw `idPk`; the former assumes the receiver already knows it. | Ed25519 signatures don't embed the public key. Rather than inline `idPk` in every announcement (a 32-byte cost on every gossip packet), it is published once via `KEY_CERTIFICATE` and cached. A future revision may merge them. | Reversible (can merge in v1 minor revision via type registry). |
