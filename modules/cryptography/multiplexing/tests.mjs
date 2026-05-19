@@ -2,7 +2,7 @@ import MultiplexingCryptography from "./index.mjs";
 import RandomGenerator from '../../random/index.mjs';
 
 import {
-    LENGHT_HANDSHAKE,
+    LENGTH_HANDSHAKE,
     LENGTH_SHARED_REMAINDER,
     LENGTH_SHARED_SECRET,
     MODULUS_SHARED_SECRET,
@@ -148,7 +148,7 @@ describe('MultiplexingCryptography', () => {
 
         const sharedSecret = new Uint8Array(LENGTH_SHARED_SECRET);
         const remainder = new Uint8Array(LENGTH_SHARED_REMAINDER);
-        const handshake = new Uint8Array(LENGHT_HANDSHAKE);
+        const handshake = new Uint8Array(LENGTH_HANDSHAKE);
 
         let count = 0;
         while (count < LIMIT_TESTS_RANDOM) {
