@@ -1105,25 +1105,6 @@ Operator-grade log shipping is out of scope for this document.
 
 ---
 
-## 8. Forwarding model
-
-> **Status: TODO.** Anticipated content:
->
-> - One-hop forwarding semantics for v0.1 (no circuits; each packet
->   independently routed).
-> - Exit policy and abuse mitigation.
-> - Multi-hop construction (v0.2 preview).
-
----
-
-## 9. Error handling
-
-> **Status: TODO.** Will specify the constant-time, side-channel-safe
-> response to: malformed packets, expired certificates, replayed
-> nonces, decryption failures, and over-long packets.
-
----
-
 ## 10. Protocol versioning
 
 ### 10.1. Version byte
