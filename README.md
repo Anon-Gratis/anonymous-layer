@@ -2,9 +2,10 @@
 
 > **⚠️ STATUS: PRE-AUDIT, PRE-SPEC, EXPERIMENTAL. DO NOT DEPLOY.**
 >
-> This software has not been audited, does not yet have a written protocol
-> specification, and contains hand-rolled cryptographic constructions that
-> are not yet considered safe. **It must not be used by journalists,
+> This software has not been audited. A draft protocol specification is in
+> [`docs/SPEC.md`](./docs/SPEC.md) (sections 1–4 of 12 complete), but the
+> reference code still implements the pre-spec design and contains
+> hand-rolled cryptographic constructions that are not yet considered safe. **It must not be used by journalists,
 > dissidents, or anyone whose physical safety depends on anonymity.** For
 > safety-critical use cases today, use [Tor](https://torproject.org). The
 > current production-readiness roadmap and the list of known critical
