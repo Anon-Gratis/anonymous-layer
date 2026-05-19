@@ -1,0 +1,13 @@
+{
+ "type": "module",
+ "scripts": {
+  "tests": "npm install && npx mocha tests.mjs"
+ },
+ "devDependencies": {
+  "chai": "^6.2.1",
+  "mocha": "^11.7.5"
+ },
+ "dependencies": {
+  "ws": "^8.18.3"
+ }
+}

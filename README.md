@@ -1,0 +1,76 @@
+# ANONYMOUS LAYER
+
+## ABOUT
+
+This project comes from the distrust towards the Tor project and the utter lack of serious competitors to it. This is an in-progress implementation of a protocol that is easy to inspect, audit and develop independent implementations of it, so you do not need to trust my software to participate in this anonymity network (as you're able to write your own). If you too are distrustful of Tor, consider supporting this project. Reach out to me for more details.
+
+## CONTACT
+
+EMAIL: wellbehaveddemon@proton.me
+
+GPG:
+
+```
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+Z0dIah5qQ8BPMs82fSA=
+=39Es
+-----END PGP PUBLIC KEY BLOCK-----
+```
+
+## DONATIONS
+
+[$XMR](https://getmonero.org): 46kZfVBP2gE98pfnKv8pXA4ujWaTCAhkBWRpze91e6wo95FCo5JX7zSGh5odzDceqwXr9vT4Bfa2tUgB1QZWC1UvTnnFvzW
+
+## TESTS
+
+```
+npm run tests
+```
