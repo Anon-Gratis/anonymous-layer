@@ -1,0 +1,9 @@
+<!-- Brand strings for the fork. -->
+<!-- This file mirrors browser/branding/mb/locales/en-US/brand.dtd in -->
+<!-- the Mullvad Browser source tree; rename mb → anon and adjust. -->
+
+<!ENTITY  brandShorterName       "Anon">
+<!ENTITY  brandShortName         "Anon Browser">
+<!ENTITY  brandFullName          "Anon Browser">
+<!ENTITY  vendorShortName        "Anonymous Layer">
+<!ENTITY  trademarkInfo.part1    "Anon Browser and the Anon Browser logos are trademarks of the Anonymous Layer project.">

@@ -1,0 +1,41 @@
+// Anon Browser — proxy autoconfig (PAC).
+//
+// Generated per launch by the anonymous launcher; @@TOR_SOCKS_PORT@@
+// and @@I2P_HTTP_PORT@@ are substituted at runtime. Loaded by Firefox
+// via network.proxy.type=2 and network.proxy.autoconfig_url=file:///.../anon.pac.
+//
+// Routing policy (v0.2):
+//   *.onion           -> Tor SOCKS5 on loopback           (anonymity)
+//   *.i2p, *.b32.i2p  -> i2pd HTTPProxy on loopback       (anonymity)
+//   anon://           -> direct (handled by the extension -> local bridge)
+//   loopback          -> direct (anon-layer bridge, tor/i2pd control)
+//   *                 -> direct (clearnet has no anonymity in v0.x)
+//
+// If a network is disabled at launch (ANON_DISABLE_TOR=1 / ANON_DISABLE_I2P=1)
+// the launcher substitutes a sentinel port for the disabled network; the
+// browser will see a refused connection rather than a silent black-hole.
+
+function FindProxyForURL(url, host) {
+  // .onion: route through Tor. dnsDomainIs() does suffix match.
+  if (dnsDomainIs(host, ".onion")) {
+    return "SOCKS5 127.0.0.1:@@TOR_SOCKS_PORT@@; SOCKS 127.0.0.1:@@TOR_SOCKS_PORT@@";
+  }
+
+  // .i2p (incl. base32 .b32.i2p): route through i2pd's HTTPProxy.
+  // dnsDomainIs(".i2p") suffix-matches both .i2p and .b32.i2p.
+  if (dnsDomainIs(host, ".i2p")) {
+    return "PROXY 127.0.0.1:@@I2P_HTTP_PORT@@";
+  }
+
+  // Localhost — never proxy. anon-layer bridge, tor/i2pd control,
+  // any future local helpers.
+  if (host === "localhost"
+      || host === "127.0.0.1"
+      || host === "::1"
+      || shExpMatch(host, "127.*")) {
+    return "DIRECT";
+  }
+
+  // Everything else: direct. v0.x has no clearnet anonymity.
+  return "DIRECT";
+}

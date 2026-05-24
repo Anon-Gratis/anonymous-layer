@@ -1,0 +1,61 @@
+# Anon Browser — bundled tor configuration.
+#
+# Generated per launch from this template by the anonymous launcher
+# (browser-fork/scripts/anon-browser.launcher.sh). The launcher
+# substitutes the @@PLACEHOLDER@@ tokens for the values it picks at
+# runtime — a random SOCKS port, a per-launch data dir.
+#
+# Goals:
+#   - .onion access only; no outbound relay, no bridges, no exit
+#   - bind to loopback only; never accept external connections
+#   - run unprivileged; we are the user's own UID, not debian-tor
+#   - no Unix-domain or control sockets we don't need
+
+# ---------- listeners ----------
+
+# SOCKS5 — only this is exposed to the browser. PAC routes
+# host=*.onion through this; everything else stays direct.
+#
+# Stream isolation flags:
+#   IsolateDestAddr      — separate circuit per destination host
+#   IsolateDestPort      — separate circuit per (host, port) pair
+#   IsolateClientProtocol — separate circuit per client protocol
+#   IsolateSOCKSAuth     — (default on) separate circuit per SOCKS
+#                          username — lets Firefox-level callers ask
+#                          for an additional per-first-party split by
+#                          setting network.proxy.socks_username.
+#
+# KeepAliveIsolateSOCKSAuth 0 — don't keep an idle circuit alive just
+# because a SOCKS-auth pair was once used on it. Forces fresh circuit
+# selection after circuit-build timeout.
+SocksPort @@SOCKS_PORT@@ IsolateDestAddr IsolateDestPort IsolateClientProtocol KeepAliveIsolateSOCKSAuth
+SocksPolicy accept 127.0.0.1
+SocksPolicy reject *
+
+# Control port for the launcher to issue NEWNYM (new identity) and to
+# read bootstrap status. Cookie auth — no password handling, the
+# cookie file is mode 600 inside the data dir.
+ControlPort @@CONTROL_PORT@@
+CookieAuthentication 1
+CookieAuthFile @@DATA_DIR@@/control_auth_cookie
+
+# ---------- data + logging ----------
+
+DataDirectory @@DATA_DIR@@
+Log notice file @@DATA_DIR@@/tor.log
+
+# ---------- network posture ----------
+
+# Don't act as a relay or exit.
+ClientOnly 1
+ExitRelay  0
+SocksTimeout 60
+
+# Use only built-in directory authorities (no bridges in v0). Future:
+# Bridge / UseBridges / ClientTransportPlugin for obfs4 / snowflake.
+
+# Avoid leaking timing patterns from DNS-over-Tor for non-.onion hosts.
+# We don't proxy clearnet anyway, but belt-and-suspenders:
+ClientRejectInternalAddresses 1
+AvoidDiskWrites 1
+DisableDebuggerAttachment 0

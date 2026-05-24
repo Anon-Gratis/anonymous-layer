@@ -1,0 +1,210 @@
+# GitHub Actions: build the Anon Browser fork on each platform.
+#
+# This workflow is SKELETON. Running it requires repository secrets
+# for signing (see ../scripts/README.md). Without those, the
+# artifacts produced are UNSIGNED and will trigger scary download
+# warnings on Windows and won't run on default-config macOS.
+#
+# Trigger on a tag push (e.g. `git tag v0.1.0 && git push --tags`)
+# OR manual dispatch from the Actions UI.
+
+name: build-anon-browser
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      mullvad_browser_tag:
+        description: 'Mullvad Browser tag to fork from'
+        required: true
+        default: 'main'
+
+env:
+  MULLVAD_BROWSER_TAG: ${{ github.event.inputs.mullvad_browser_tag || 'main' }}
+
+jobs:
+
+  # ============== Linux ==============
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgtk-3-dev libdbus-glib-1-dev \
+            mercurial python3-dev libpulse-dev libasound2-dev wget curl
+
+      - name: Fetch Mullvad Browser source
+        run: |
+          cd browser-fork
+          bash scripts/fetch-source.sh "$MULLVAD_BROWSER_TAG"
+
+      - name: Apply patches
+        run: |
+          cd browser-fork
+          bash scripts/apply-patches.sh
+
+      - name: Build
+        # NOTE: A full build takes ~2 hours. GitHub Actions ubuntu runners
+        # have ~7 GB RAM and ~30 GB disk by default; you may need a
+        # larger runner or self-hosted infra. Adjust accordingly.
+        run: |
+          cd browser-fork
+          bash scripts/build-linux.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anon-browser-linux-x86_64
+          path: browser-fork/build/linux/dist/anon-browser-*.tar.bz2
+
+  # ============== macOS ==============
+  macos:
+    runs-on: macos-14   # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build prerequisites
+        run: |
+          brew install autoconf@2.13 yasm
+
+      - name: Fetch Mullvad Browser source
+        run: |
+          cd browser-fork
+          bash scripts/fetch-source.sh "$MULLVAD_BROWSER_TAG"
+
+      - name: Apply patches
+        run: |
+          cd browser-fork
+          bash scripts/apply-patches.sh
+
+      - name: Import signing identity
+        if: env.HAS_APPLE_SIGNING == 'true'
+        env:
+          APPLE_CERT_P12:       ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD:  ${{ secrets.APPLE_CERT_PASSWORD }}
+          HAS_APPLE_SIGNING:    ${{ secrets.APPLE_CERT_P12 != '' }}
+        run: |
+          # Decode the base64-encoded .p12 cert and import into keychain.
+          # See: https://docs.github.com/en/actions/use-cases-and-examples/deploying/installing-an-apple-certificate-on-macos-runners-for-xcode-development
+          echo "$APPLE_CERT_P12" | base64 --decode > /tmp/cert.p12
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import /tmp/cert.p12 -k build.keychain -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k actions build.keychain
+          echo "APPLE_SIGNING_ID=Developer ID Application: $(security find-identity -v -p codesigning build.keychain | head -1 | sed 's/.*"\(.*\)".*/\1/')" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          cd browser-fork
+          bash scripts/build-macos.sh
+
+      - name: Notarize
+        if: env.APPLE_SIGNING_ID != ''
+        env:
+          APPLE_ID:       ${{ secrets.APPLE_NOTARIZE_USER }}
+          APP_PWD:        ${{ secrets.APPLE_NOTARIZE_PASSWORD }}
+          TEAM_ID:        ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cd browser-fork/build/macos/dist
+          # Create the .dmg first.
+          # brew install create-dmg
+          create-dmg --volname "Anon Browser" "Anon Browser.dmg" "Anon Browser.app"
+          # Submit for notarization.
+          xcrun notarytool submit "Anon Browser.dmg" \
+              --apple-id "$APPLE_ID" \
+              --password "$APP_PWD" \
+              --team-id "$TEAM_ID" \
+              --wait
+          xcrun stapler staple "Anon Browser.dmg"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anon-browser-macos
+          path: browser-fork/build/macos/dist/*.dmg
+
+  # ============== Windows ==============
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Mozilla's build wants a unix-style line ending; checkout
+          # accordingly.
+          fetch-depth: 0
+
+      - name: Install MozillaBuild
+        shell: pwsh
+        run: |
+          # MozillaBuild provides bash + python for the Mozilla build.
+          # See https://firefox-source-docs.mozilla.org/setup/windows_build.html
+          choco install mozillabuild -y
+
+      - name: Fetch + apply + build (via MozillaBuild bash)
+        shell: bash
+        run: |
+          export PATH="/c/mozilla-build/start-shell.bat:$PATH"
+          cd browser-fork
+          bash scripts/fetch-source.sh "$MULLVAD_BROWSER_TAG"
+          bash scripts/apply-patches.sh
+          bash scripts/build-windows.sh
+
+      - name: Sign installer
+        if: env.HAS_WINDOWS_SIGNING == 'true'
+        env:
+          WINDOWS_CERT_PFX:      ${{ secrets.WINDOWS_CERT_PFX }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          HAS_WINDOWS_SIGNING:   ${{ secrets.WINDOWS_CERT_PFX != '' }}
+        shell: pwsh
+        run: |
+          # Decode the .pfx, sign with signtool.
+          # Note: EV signing certs typically use hardware tokens that
+          # don't work in cloud CI. Standard signing certs work here.
+          $bytes = [Convert]::FromBase64String($env:WINDOWS_CERT_PFX)
+          [IO.File]::WriteAllBytes('cert.pfx', $bytes)
+          $exe = Get-ChildItem -Path 'browser-fork/build/windows/dist/install/sea/' -Filter '*.exe' | Select-Object -First 1
+          & signtool sign /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD `
+              /tr http://timestamp.digicert.com /td sha256 /fd sha256 $exe
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anon-browser-windows-x64
+          path: browser-fork/build/windows/dist/install/sea/*.exe
+
+  # ============== Android ==============
+  # Android is a separate codebase (Fenix). See build-android.sh for
+  # the explanation. This job is a placeholder.
+  android:
+    runs-on: ubuntu-22.04
+    if: false  # disabled until Fenix fork lands
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder
+        run: |
+          echo "Android build deferred. See browser-fork/scripts/build-android.sh"
+
+  # ============== Release (when triggered by a tag) ==============
+  release:
+    needs: [linux, macos, windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            anon-browser-linux-x86_64/*.tar.bz2
+            anon-browser-macos/*.dmg
+            anon-browser-windows-x64/*.exe
+          generate_release_notes: true
+          draft: true   # human review before publishing

@@ -1,0 +1,66 @@
+# anon-layer directory authority — single-VPS docker-compose.
+#
+# Layout:
+#   anon-da   — runs anon-mkconsensus init/build, hourly cron rebuild
+#   caddy     — terminates https://${DA_DOMAIN}:443, serves /srv
+#                contents (consensus.bin + da-trust.local.json)
+#
+# Persistent state (host bind mounts):
+#   ./data/       ← da-identity.bin (mode 0600), da-trust.json
+#   ./srv/        ← consensus.bin (regenerated hourly), served by Caddy
+#   ./relays.json ← the network's relay list (synced from deploy repo)
+#   ./caddy-data/ ← Let's Encrypt certs
+#
+# Env (loaded from .env in the same directory):
+#   DA_DOMAIN              ← e.g. da1.anon.gratis (DNS must resolve)
+#   ACME_EMAIL             ← for Let's Encrypt cert issuance
+#   ANON_CONSENSUS_LIFETIME ← seconds; default 3600 (1h)
+#
+# Bring up (first time — DA identity is generated on first start):
+#   docker compose -f da.yml up -d
+#   # Then `docker logs anon-da` to copy this DA's trust entry into
+#   # the network-wide da-trust.json.
+
+version: "3.9"
+
+services:
+  anon-da:
+    image: anon-da:dev
+    container_name: anon-da
+    restart: unless-stopped
+    environment:
+      ANON_CONSENSUS_LIFETIME: ${ANON_CONSENSUS_LIFETIME:-3600}
+    volumes:
+      - ./data:/data
+      - ./srv:/srv
+      - ./relays.json:/etc/anon-da/relays.json:ro
+    networks:
+      - daanet
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: anon-da-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"     # ACME HTTP challenge
+      - "443:443"   # consensus + da-trust.json over https
+    environment:
+      DA_DOMAIN:  ${DA_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./srv:/srv:ro
+      - ./caddy-data:/data
+      - ./caddy-config:/config
+    networks:
+      - daanet
+    depends_on:
+      - anon-da
+
+networks:
+  daanet:
+    driver: bridge

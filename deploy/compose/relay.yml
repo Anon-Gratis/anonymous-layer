@@ -1,0 +1,58 @@
+# anon-layer relay — single-VPS docker-compose.
+#
+# Layout (v0 PRE-AUDIT TESTNET):
+#   anon-node  — relay daemon, container port 9001 published to host 443
+#
+# NO Caddy / NO wss:// at the link layer. modules/v2-runtime/
+# link_transport_ws.mjs dials plain `ws://${host}:${port}` — a TLS
+# terminator would refuse the upgrade. § 11.4 of the spec calls this
+# out as a deployment gap (operators SHOULD deploy wss:// once the
+# dialer supports it). For v0 we accept the gap; the cell-layer AEAD
+# inside still gives confidentiality + integrity, just not link
+# metadata-flow protection between relays.
+#
+# Port 443 chosen as the public-facing port because most corporate /
+# campus firewalls permit it, raising reach. The daemon binds 9001
+# inside the container (non-root user 1500 can't bind <1024); Docker
+# port-mapping does the 443 → 9001 translation at the kernel.
+#
+# Persistent state (host bind mounts):
+#   ./data/                 ← identity.key (mode 0600)
+#   ./config/consensus.bin  ← signed consensus, distributed by operator
+#   ./config/da-trust.json  ← root of trust
+#
+# Env (./.env):
+#   RELAY_DOMAIN            ← e.g. relay1.anon.gratis (cosmetic; used in
+#                             relays.json on the DA side, not by the
+#                             container itself)
+#   ANON_EXIT_POLICY        ← reject | reduced | standard (default reject)
+#
+# Bring up:
+#   docker compose -f relay.yml up -d
+#
+# Refresh consensus + restart:
+#   curl -fsSL https://da1.anon.gratis/consensus.bin > config/consensus.bin
+#   docker compose -f relay.yml restart anon-node
+
+version: "3.9"
+
+services:
+  anon-node:
+    image: anon-relay:dev
+    container_name: anon-relay
+    restart: unless-stopped
+    ports:
+      # host 443 → container 9001. Public WS endpoint for other relays
+      # + clients to dial.
+      - "443:9001"
+    environment:
+      ANON_BIND_HOST: 0.0.0.0
+      ANON_BIND_PORT: 9001
+      ANON_EXIT_POLICY: ${ANON_EXIT_POLICY:-reject}
+    volumes:
+      - ./data:/data
+      - ./config:/etc/anon-node:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M

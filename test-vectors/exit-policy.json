@@ -1,0 +1,589 @@
+{
+  "description": "Exit policy codec (SPEC § 8.1). Each rule = action(1) || addr_type(1) || addr_prefix(varies, see § 8.1) || port_min(2 BE) || port_max(2 BE). Multiple rules concatenated. Empty array = POLICY_REJECT_ALL.",
+  "version": 1,
+  "vectors": [
+    {
+      "name": "POLICY_REJECT_ALL (zero rules)",
+      "input": {
+        "rules": []
+      },
+      "expectedHex": "0000"
+    },
+    {
+      "name": "single ANY rule: accept port 443",
+      "input": {
+        "rules": [
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 443,
+            "portMax": 443
+          }
+        ]
+      },
+      "expectedHex": "000101ff01bb01bb"
+    },
+    {
+      "name": "single IPv4 rule: reject 10.0.0.0/8 ports 0-65535",
+      "input": {
+        "rules": [
+          {
+            "action": "reject",
+            "addrType": "ipv4",
+            "netHex": "0a000000",
+            "maskLen": 8,
+            "portMin": 0,
+            "portMax": 65535
+          }
+        ]
+      },
+      "expectedHex": "000102010a000000080000ffff"
+    },
+    {
+      "name": "single IPv6 rule: accept 2001:db8::/32 port 443",
+      "input": {
+        "rules": [
+          {
+            "action": "accept",
+            "addrType": "ipv6",
+            "netHex": "20010db8000000000000000000000000",
+            "maskLen": 32,
+            "portMin": 443,
+            "portMax": 443
+          }
+        ]
+      },
+      "expectedHex": "0001010220010db80000000000000000000000002001bb01bb"
+    },
+    {
+      "name": "reduced-exit preset",
+      "input": {
+        "rules": [
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 80,
+            "portMax": 80
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 443,
+            "portMax": 443
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 53,
+            "portMax": 53
+          }
+        ]
+      },
+      "expectedHex": "000301ff0050005001ff01bb01bb01ff00350035"
+    },
+    {
+      "name": "standard-exit preset",
+      "input": {
+        "rules": [
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 20,
+            "portMax": 23
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 53,
+            "portMax": 53
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 80,
+            "portMax": 80
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 88,
+            "portMax": 88
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 110,
+            "portMax": 110
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 143,
+            "portMax": 143
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 220,
+            "portMax": 220
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 443,
+            "portMax": 443
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 465,
+            "portMax": 465
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 587,
+            "portMax": 587
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 706,
+            "portMax": 706
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 749,
+            "portMax": 749
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 873,
+            "portMax": 873
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 902,
+            "portMax": 904
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 981,
+            "portMax": 981
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 989,
+            "portMax": 995
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 1194,
+            "portMax": 1194
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 1220,
+            "portMax": 1220
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 1293,
+            "portMax": 1293
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 1500,
+            "portMax": 1500
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 1533,
+            "portMax": 1533
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 1677,
+            "portMax": 1677
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 1723,
+            "portMax": 1723
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 1755,
+            "portMax": 1755
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 1863,
+            "portMax": 1863
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 2082,
+            "portMax": 2083
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 2086,
+            "portMax": 2087
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 2095,
+            "portMax": 2096
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 2102,
+            "portMax": 2104
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 3690,
+            "portMax": 3690
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 4321,
+            "portMax": 4321
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 4643,
+            "portMax": 4643
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 5050,
+            "portMax": 5050
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 5190,
+            "portMax": 5190
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 5222,
+            "portMax": 5223
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 5228,
+            "portMax": 5228
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 5900,
+            "portMax": 5900
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 6660,
+            "portMax": 6669
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 6679,
+            "portMax": 6679
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 6697,
+            "portMax": 6697
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8000,
+            "portMax": 8000
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8008,
+            "portMax": 8008
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8074,
+            "portMax": 8074
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8080,
+            "portMax": 8080
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8082,
+            "portMax": 8082
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8087,
+            "portMax": 8088
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8232,
+            "portMax": 8233
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8332,
+            "portMax": 8333
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8443,
+            "portMax": 8443
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 8888,
+            "portMax": 8888
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 9418,
+            "portMax": 9418
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 9999,
+            "portMax": 9999
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 10000,
+            "portMax": 10000
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 11371,
+            "portMax": 11371
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 19294,
+            "portMax": 19294
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 19638,
+            "portMax": 19638
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 50002,
+            "portMax": 50002
+          },
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 64738,
+            "portMax": 64738
+          }
+        ]
+      },
+      "expectedHex": "003a01ff0014001701ff0035003501ff0050005001ff0058005801ff006e006e01ff008f008f01ff00dc00dc01ff01bb01bb01ff01d101d101ff024b024b01ff02c202c201ff02ed02ed01ff0369036901ff0386038801ff03d503d501ff03dd03e301ff04aa04aa01ff04c404c401ff050d050d01ff05dc05dc01ff05fd05fd01ff068d068d01ff06bb06bb01ff06db06db01ff0747074701ff0822082301ff0826082701ff082f083001ff0836083801ff0e6a0e6a01ff10e110e101ff1223122301ff13ba13ba01ff1446144601ff1466146701ff146c146c01ff170c170c01ff1a041a0d01ff1a171a1701ff1a291a2901ff1f401f4001ff1f481f4801ff1f8a1f8a01ff1f901f9001ff1f921f9201ff1f971f9801ff2028202901ff208c208d01ff20fb20fb01ff22b822b801ff24ca24ca01ff270f270f01ff2710271001ff2c6b2c6b01ff4b5e4b5e01ff4cb64cb601ffc352c35201fffce2fce2"
+    },
+    {
+      "name": "mixed: accept HTTPS, reject everything else",
+      "input": {
+        "rules": [
+          {
+            "action": "accept",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 443,
+            "portMax": 443
+          },
+          {
+            "action": "reject",
+            "addrType": "any",
+            "netHex": null,
+            "maskLen": null,
+            "portMin": 0,
+            "portMax": 65535
+          }
+        ]
+      },
+      "expectedHex": "000201ff01bb01bb02ff0000ffff"
+    }
+  ]
+}

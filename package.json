@@ -5,15 +5,23 @@
  "type": "module",
  "license": "AGPL-3.0-or-later",
  "author": "Anonymous Gratis <admin@anon.gratis>",
+ "bin": {
+  "anon-node": "bin/anon-node.mjs",
+  "anon-chat": "bin/anon-chat.mjs"
+ },
  "scripts": {
-  "test": "npx mocha tests.mjs",
+  "test": "npx mocha --exit tests.mjs && node browser-fork/extension/tests-extension.mjs",
   "tests": "npm test"
  },
  "devDependencies": {
   "chai": "^6.2.1",
+  "fast-check": "^4.8.0",
   "mocha": "^11.7.5"
  },
  "dependencies": {
+  "@noble/curves": "^2.2.0",
+  "@noble/hashes": "^2.2.0",
+  "@noble/post-quantum": "^0.6.1",
   "ws": "^8.18.3"
  }
 }

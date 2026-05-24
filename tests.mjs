@@ -1,11 +1,35 @@
-import './modules/cryptography/elgamal/tests.mjs';
-import './modules/cryptography/multiplexing/tests.mjs';
-import './modules/cryptography/twofish/tests.mjs';
-import './modules/packets/coordination/format/tests.mjs';
-import './modules/packets/coordination/parse/tests.mjs';
-import './modules/random/tests.mjs';
-// router/tests.mjs disabled: router imports symbols that do not exist in
-// constants and uses a packet-text schema inconsistent with the format/parse
-// modules. Re-enable after the router is rewritten (Phase 4).
-// import './modules/router/tests.mjs';
-import './modules/utilities/tests.mjs';
+import './modules/crypto/tests.mjs';
+import './modules/wire/tests.mjs';
+import './modules/wire/tests-types.mjs';
+import './modules/wire/tests-properties.mjs';
+import './modules/peer/tests.mjs';
+import './modules/node/tests.mjs';
+import './modules/node/tests-websocket.mjs';
+import './modules/node/tests-dialer.mjs';
+import './bin/tests-cli.mjs';
+import './bin/tests-chat.mjs';
+import './modules/v2/tests-cells.mjs';
+import './modules/v2/tests-vectors.mjs';
+import './modules/v2/tests-circuit.mjs';
+import './modules/v2/tests-link.mjs';
+import './modules/v2-site/tests-sites.mjs';
+import './modules/v2-site/tests-server.mjs';
+import './modules/v2-site/tests-client.mjs';
+import './modules/v2-runtime/tests-runtime.mjs';
+import './modules/v2-runtime/tests-dispatcher.mjs';
+import './modules/v2-runtime/tests-circuit-build.mjs';
+import './modules/v2-runtime/tests-streams.mjs';
+import './modules/v2-runtime/tests-anon-layer-tunnel.mjs';
+import './modules/v2-runtime/tests-rendezvous-roles.mjs';
+import './modules/v2-runtime/tests-rendezvous-e2e.mjs';
+import './modules/v2-runtime/tests-descriptor-index.mjs';
+import './modules/v2-runtime/tests-hsdir-client.mjs';
+import './modules/v2-runtime/tests-hsdir-circuit.mjs';
+import './modules/v2/tests-relay.mjs';
+import './modules/v2/tests-exit-policy.mjs';
+import './modules/v2/tests-socks.mjs';
+import './modules/v2/tests-consensus.mjs';
+import './modules/v2/tests-ntor-hybrid.mjs';
+import './modules/v2/tests-fragment.mjs';
+import './modules/v2/tests-hidden-services.mjs';
+import './modules/v2/tests-rendezvous.mjs';

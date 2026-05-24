@@ -1,0 +1,227 @@
+# Release pipeline — builds Linux + Windows + macOS artifacts on every
+# v* tag push and attaches them to the GitHub release.
+#
+# Trigger model: tag push only. PRs and main pushes are handled by
+# ci.yml (tests, audit) and don't produce release artifacts.
+#
+# Build matrix:
+#   linux-amd64   — ubuntu-latest, repackage-mullvad.sh
+#   windows-amd64 — ubuntu-latest (cross-build), repackage-mullvad-windows.sh
+#   macos-arm64   — macos-latest (Apple silicon runner), repackage-mullvad-macos.sh
+#   macos-amd64   — macos-13     (Intel runner),         repackage-mullvad-macos.sh
+#
+# Each job produces a .tar.xz / .zip / .dmg + matching .sha256.
+# The publish job collects all artifacts and (a) attaches them to the
+# tag's GitHub release, (b) writes an aggregate SHA256SUMS, and
+# (c) signs SHA256SUMS with GPG if the GPG_PRIVATE_KEY secret is set.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.2.0). Required for manual dispatch.'
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false  # never cancel a release build mid-flight
+
+env:
+  GO_VERSION: '1.23'
+  NODE_VERSION: '20.20.1'
+
+permissions:
+  contents: write  # required to upload assets to the release
+
+jobs:
+  # ---------- linux ----------
+
+  build-linux:
+    name: Build linux-amd64 tarball
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xz-utils zip curl tar gpg python3-pil
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build
+        run: |
+          chmod +x browser-fork/scripts/repackage-mullvad.sh
+          ./browser-fork/scripts/repackage-mullvad.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64
+          path: |
+            dist/anonymous-*-linux-x86_64.tar.xz
+            dist/anonymous-*-linux-x86_64.tar.xz.sha256
+          if-no-files-found: error
+
+  # ---------- windows (built FROM ubuntu) ----------
+
+  build-windows:
+    name: Build windows-amd64 zip (cross-built from Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            p7zip-full zip unzip curl gpg python3-pil
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: browser-fork/launcher-go/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build
+        run: |
+          chmod +x browser-fork/scripts/repackage-mullvad-windows.sh
+          ./browser-fork/scripts/repackage-mullvad-windows.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64
+          path: |
+            dist/anonymous-*-windows-x86_64.zip
+            dist/anonymous-*-windows-x86_64.zip.sha256
+          if-no-files-found: error
+
+  # ---------- macOS (one job per arch) ----------
+
+  build-macos:
+    name: Build macos-${{ matrix.arch.label }} dmg
+    runs-on: ${{ matrix.arch.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - { label: arm64,  runner: macos-latest, name: arm64  }
+          - { label: amd64,  runner: macos-13,     name: x86_64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python + Pillow
+        run: |
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user Pillow
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: browser-fork/launcher-go/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build
+        run: |
+          chmod +x browser-fork/scripts/repackage-mullvad-macos.sh
+          ./browser-fork/scripts/repackage-mullvad-macos.sh --arch ${{ matrix.arch.name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch.label }}
+          path: |
+            dist/anonymous-*-macos-${{ matrix.arch.name }}.dmg
+            dist/anonymous-*-macos-${{ matrix.arch.name }}.dmg.sha256
+          if-no-files-found: error
+
+  # ---------- publish to GitHub release ----------
+
+  publish:
+    name: Publish to GitHub release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve target tag
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "ref=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Flatten + write aggregate SHA256SUMS
+        run: |
+          mkdir -p release/
+          # Move every artifact + its per-file sha256 into release/
+          find artifacts/ -type f \( -name '*.tar.xz' -o -name '*.zip' -o -name '*.dmg' \
+                                   -o -name '*.sha256' \) -exec cp -t release/ {} +
+          ( cd release && \
+            sha256sum -- *.tar.xz *.zip *.dmg 2>/dev/null | sort > SHA256SUMS )
+          echo "--- release/ ---"; ls -la release/
+          echo "--- SHA256SUMS ---"; cat release/SHA256SUMS
+
+      - name: Detect GPG secret presence
+        run: |
+          if [[ -n "${{ secrets.GPG_PRIVATE_KEY }}" ]]; then
+            echo "GPG_KEY_PRESENT=1" >> "$GITHUB_ENV"
+          else
+            echo "GPG_KEY_PRESENT=0" >> "$GITHUB_ENV"
+            echo "::notice::GPG_PRIVATE_KEY secret not set; SHA256SUMS will be unsigned."
+          fi
+
+      - name: Sign SHA256SUMS (optional — only if GPG_PRIVATE_KEY is set)
+        if: ${{ env.GPG_KEY_PRESENT == '1' }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          KEY_ID=$(gpg --list-secret-keys --keyid-format=long | grep -E '^sec' | head -1 | sed -E 's/.*\/([0-9A-F]+).*/\1/')
+          echo "signing with $KEY_ID"
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+              --local-user "$KEY_ID" \
+              --output release/SHA256SUMS.asc \
+              --detach-sign --armor \
+              release/SHA256SUMS
+
+      - name: Attach artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.ref }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          files: |
+            release/*.tar.xz
+            release/*.zip
+            release/*.dmg
+            release/*.sha256
+            release/SHA256SUMS
+            release/SHA256SUMS.asc

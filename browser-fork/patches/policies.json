@@ -1,0 +1,71 @@
+{
+  "//": "Mullvad Browser distribution policy that pre-configures the browser for anon-layer use.",
+  "//": "Drop this in Mullvad Browser's distribution/ subdirectory (path varies by platform).",
+  "//": "See docs/USING-MULLVAD-BROWSER.md for installation details.",
+  "policies": {
+    "Proxy": {
+      "Mode": "manual",
+      "SOCKSProxy": "127.0.0.1:1080",
+      "SOCKSVersion": 5,
+      "UseProxyForDNS": false,
+      "Locked": false,
+      "//": "UseProxyForDNS is false by default; see USING-MULLVAD-BROWSER.md § 4 for the DNS-leak tradeoff. Set to true only after exit-side DNS lands in the protocol."
+    },
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisablePocket": true,
+    "DisableFirefoxAccounts": true,
+    "DisableFirefoxScreenshots": true,
+    "DisableFormHistory": true,
+    "DisableMasterPasswordCreation": true,
+    "DisableProfileImport": true,
+    "DisableProfileRefresh": true,
+    "DisableSetDesktopBackground": true,
+    "DontCheckDefaultBrowser": true,
+    "NoDefaultBookmarks": true,
+    "OfferToSaveLogins": false,
+    "PasswordManagerEnabled": false,
+    "SearchSuggestEnabled": false,
+    "PromptForDownloadLocation": true,
+    "Preferences": {
+      "browser.startup.homepage": {
+        "Value": "about:blank",
+        "Status": "default"
+      },
+      "browser.urlbar.suggest.bookmark": {
+        "Value": false,
+        "Status": "locked"
+      },
+      "browser.urlbar.suggest.history": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.urlbar.suggest.openpage": {
+        "Value": false,
+        "Status": "default"
+      },
+      "network.dns.disabled": {
+        "Value": false,
+        "Status": "default",
+        "//": "Keep false: DNS-disabled would break TLS hostname validation for clearnet exit traffic. The DNS-leak concern is handled by Proxy.UseProxyForDNS=false."
+      },
+      "network.proxy.allow_hijacking_localhost": {
+        "Value": false,
+        "Status": "locked"
+      },
+      "network.proxy.socks_remote_dns": {
+        "Value": false,
+        "Status": "default"
+      },
+      "media.peerconnection.enabled": {
+        "Value": false,
+        "Status": "locked",
+        "//": "Block WebRTC entirely — it can leak the real IP outside the SOCKS5 tunnel."
+      },
+      "media.navigator.enabled": {
+        "Value": false,
+        "Status": "locked"
+      }
+    }
+  }
+}

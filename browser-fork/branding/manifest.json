@@ -1,0 +1,14 @@
+{
+  "//": "Application manifest skeleton — fields here are typically baked into the build at compile time via configure.sh.",
+  "//": "This file is for human reference; it is NOT loaded at runtime.",
+  "name": "Anon Browser",
+  "short_name": "Anon",
+  "vendor": "Anonymous Layer",
+  "bundle_id": "org.anon-layer.browser",
+  "remoting_name": "anon-browser",
+  "homepage": "https://anon-layer.example.org/",
+  "support_url": "https://anon-layer.example.org/support",
+  "telemetry_url": null,
+  "update_url": "https://anon-layer.example.org/updates/%CHANNEL%/%OS%/%ARCH%/%VERSION%.xml",
+  "license": "AGPL-3.0-or-later"
+}

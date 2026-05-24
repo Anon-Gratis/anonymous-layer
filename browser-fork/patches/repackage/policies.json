@@ -1,0 +1,162 @@
+{
+  "//": "All non-proxy hardening from the Mullvad-overlay policy is kept.",
+  "policies": {
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisablePocket": true,
+    "DisableFirefoxAccounts": true,
+    "DisableFirefoxScreenshots": true,
+    "DisableFormHistory": true,
+    "DisableMasterPasswordCreation": true,
+    "DisableProfileImport": true,
+    "DisableProfileRefresh": true,
+    "DisableSetDesktopBackground": true,
+    "DontCheckDefaultBrowser": true,
+    "//Bookmarks": "Demo bookmark on the toolbar root points at about:newtab; the anon-layer extension overrides newtab via chrome_url_overrides, so clicking this opens the demo via the moz-extension:// path (works in chrome context). Pointing a bookmark directly at web+anon:// fails because Firefox only dispatches web+xxx schemes to extension handlers from CONTENT context, not from chrome (bookmark clicks, URL-bar entry, etc). The 'Anonymous' folder collects the project's canonical clearnet + onion entry points; nested folders are not supported by the Bookmarks policy so it stays flat.",
+    "Bookmarks": [
+      {
+        "Title": "About",
+        "URL": "http://127.0.0.1:1081/?url=anon%3A%2F%2Fpd7oljno3rdtsrtludnwesh362veu3mtawnjx6ozn7uso7gh7k4nq5ad.anon",
+        "Placement": "toolbar",
+        "Folder": ""
+      },
+      {
+        "Title": "anonymous.gratis",
+        "URL": "https://anonymous.gratis/",
+        "Placement": "toolbar",
+        "Folder": "Anonymous"
+      },
+      {
+        "Title": "Main site (.anon)",
+        "URL": "http://127.0.0.1:1081/?url=anon%3A%2F%2Fanona4y4gpit3bbuunqhvubajjgmnvuhupka4gqibkdldpby64ujtkqd.anon",
+        "Placement": "toolbar",
+        "Folder": "Anonymous"
+      },
+      {
+        "Title": "anon.gratis",
+        "URL": "https://anon.gratis/",
+        "Placement": "toolbar",
+        "Folder": "Anonymous"
+      },
+      {
+        "Title": "Main site (onion)",
+        "URL": "http://anonymous3yfsvwiroavlno5xzpyvqndqfnltj4wxonyfaset4ay6fyd.onion/",
+        "Placement": "toolbar",
+        "Folder": "Anonymous"
+      },
+      {
+        "Title": "Webmail & XMPP (onion)",
+        "URL": "http://vh354v5ux5gtl5omfqra5gh64zjvgztrgxnv5igjxmjlsbh2lznt5tad.onion/",
+        "Placement": "toolbar",
+        "Folder": "Anonymous"
+      },
+      {
+        "Title": "Whistleblower Portal (onion)",
+        "URL": "http://ieyezgeojxw73hv4szrkbreea3rd6ri7xfbevngi63uabothn226euyd.onion/",
+        "Placement": "toolbar",
+        "Folder": "Anonymous"
+      },
+      { "Title": "PrivacyGuides",                "URL": "https://www.privacyguides.org/", "Placement": "toolbar", "Folder": "OPSEC" },
+      { "Title": "EFF Surveillance Self-Defense", "URL": "https://ssd.eff.org/",           "Placement": "toolbar", "Folder": "OPSEC" },
+      { "Title": "Tor Project",                  "URL": "https://www.torproject.org/",    "Placement": "toolbar", "Folder": "OPSEC" },
+      { "Title": "Tails",                        "URL": "https://tails.net/",             "Placement": "toolbar", "Folder": "OPSEC" },
+      { "Title": "Qubes OS",                     "URL": "https://www.qubes-os.org/",      "Placement": "toolbar", "Folder": "OPSEC" },
+      { "Title": "Whonix",                       "URL": "https://www.whonix.org/",        "Placement": "toolbar", "Folder": "OPSEC" },
+      { "Title": "Signal",                       "URL": "https://signal.org/",            "Placement": "toolbar", "Folder": "OPSEC" },
+      { "Title": "Hitchhiker's Guide to Anonymity", "URL": "https://anonymousplanet.org/", "Placement": "toolbar", "Folder": "OPSEC" },
+      { "Title": "OSINT Framework",              "URL": "https://osintframework.com/",     "Placement": "toolbar", "Folder": "OSINT" },
+      { "Title": "IntelTechniques Tools",        "URL": "https://inteltechniques.com/tools/", "Placement": "toolbar", "Folder": "OSINT" },
+      { "Title": "Bellingcat Toolkit",           "URL": "https://www.bellingcat.com/resources/", "Placement": "toolbar", "Folder": "OSINT" },
+      { "Title": "Sherlock (username search)",   "URL": "https://github.com/sherlock-project/sherlock", "Placement": "toolbar", "Folder": "OSINT" },
+      { "Title": "Wayback Machine",              "URL": "https://web.archive.org/",        "Placement": "toolbar", "Folder": "OSINT" },
+      { "Title": "Shodan",                       "URL": "https://www.shodan.io/",          "Placement": "toolbar", "Folder": "OSINT" },
+      { "Title": "Censys",                       "URL": "https://search.censys.io/",       "Placement": "toolbar", "Folder": "OSINT" },
+      { "Title": "Ahmia (Tor search)",           "URL": "https://ahmia.fi/",               "Placement": "toolbar", "Folder": "OSINT" },
+      { "Title": "Element (Matrix)",             "URL": "https://element.io/",             "Placement": "toolbar", "Folder": "Secure Comms" },
+      { "Title": "Briar",                        "URL": "https://briarproject.org/",       "Placement": "toolbar", "Folder": "Secure Comms" },
+      { "Title": "OnionShare",                   "URL": "https://onionshare.org/",         "Placement": "toolbar", "Folder": "Secure Comms" },
+      { "Title": "CryptPad",                     "URL": "https://cryptpad.fr/",            "Placement": "toolbar", "Folder": "Secure Comms" },
+      { "Title": "Proton Mail",                  "URL": "https://proton.me/mail",          "Placement": "toolbar", "Folder": "Secure Comms" },
+      { "Title": "Tuta Mail",                    "URL": "https://tuta.com/",               "Placement": "toolbar", "Folder": "Secure Comms" },
+      { "Title": "Jami",                         "URL": "https://jami.net/",               "Placement": "toolbar", "Folder": "Secure Comms" },
+      { "Title": "SecureDrop Directory",         "URL": "https://securedrop.org/directory/", "Placement": "toolbar", "Folder": "Journalism" },
+      { "Title": "Freedom of the Press Foundation", "URL": "https://freedom.press/",       "Placement": "toolbar", "Folder": "Journalism" },
+      { "Title": "Reporters Without Borders",    "URL": "https://rsf.org/",                "Placement": "toolbar", "Folder": "Journalism" },
+      { "Title": "GlobaLeaks",                   "URL": "https://www.globaleaks.org/",     "Placement": "toolbar", "Folder": "Journalism" },
+      { "Title": "Distributed Denial of Secrets","URL": "https://ddosecrets.com/",         "Placement": "toolbar", "Folder": "Journalism" },
+      { "Title": "Investigative Reporters & Editors", "URL": "https://www.ire.org/",       "Placement": "toolbar", "Folder": "Journalism" },
+      { "Title": "Ahmia (clearnet)",             "URL": "https://ahmia.fi/",               "Placement": "toolbar", "Folder": "Tor & Onions" },
+      { "Title": "Ahmia (.onion)",               "URL": "http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/", "Placement": "toolbar", "Folder": "Tor & Onions" },
+      { "Title": "DuckDuckGo (.onion)",          "URL": "https://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/", "Placement": "toolbar", "Folder": "Tor & Onions" },
+      { "Title": "Tor Project (.onion)",         "URL": "http://2gzyxa5ihm7nsggfxnu52rck2vv4rvmdlkiu3zzui5du4xyclen53wid.onion/", "Placement": "toolbar", "Folder": "Tor & Onions" },
+      { "Title": "Snowflake (bridge)",           "URL": "https://snowflake.torproject.org/", "Placement": "toolbar", "Folder": "Tor & Onions" },
+      { "Title": "Tor Metrics",                  "URL": "https://metrics.torproject.org/", "Placement": "toolbar", "Folder": "Tor & Onions" }
+    ],
+    "//ExtensionSettings": "Allowlist: only our shipped extensions can install. anon-layer is unsigned by design (no AMO submission for v0); the matching xpinstall.signatures.required=false in Preferences lets it load, while this allowlist prevents that hole from being abused to install other unsigned addons. The Mullvad-VPN companion is explicitly blocked to stop reinstall via cdn.mullvad.net.",
+    "ExtensionSettings": {
+      "*": {
+        "installation_mode": "blocked"
+      },
+      "anon-layer@anon.gratis": {
+        "installation_mode": "force_installed",
+        "install_url": "file://@@INSTALL_DIR@@/Browser/distribution/extensions/anon-layer@anon.gratis.xpi"
+      },
+      "{73a6fe31-595d-460b-a920-fcc0f8843232}": {
+        "installation_mode": "allowed"
+      },
+      "uBlock0@raymondhill.net": {
+        "installation_mode": "allowed"
+      },
+      "{d19a89b9-76c1-4a61-bcd4-49e8de916403}": {
+        "installation_mode": "blocked"
+      }
+    },
+    "OfferToSaveLogins": false,
+    "PasswordManagerEnabled": false,
+    "SearchSuggestEnabled": false,
+    "PromptForDownloadLocation": true,
+    "//SearchEngines-disabled": "We tried a custom search engine with alias 'anon' and URLTemplate web+anon://{searchTerms}, but (a) it conflicts with the extension's own omnibox keyword on the same alias (search engine wins, omnibox loses), and (b) the resulting web+anon:// navigation comes from chrome context, which Firefox refuses to dispatch to extension handlers. The omnibox keyword from the extension already does the right thing \u2014 leave it alone.",
+    "Preferences": {
+      "browser.toolbars.bookmarks.visibility": {
+        "Value": "always",
+        "Status": "locked",
+        "//": "Override the Mullvad 'never' default so the Demo bookmark on the toolbar is actually visible."
+      },
+      "browser.startup.homepage": {
+        "Value": "about:blank",
+        "Status": "default"
+      },
+      "browser.urlbar.suggest.bookmark": {
+        "Value": false,
+        "Status": "locked"
+      },
+      "browser.urlbar.suggest.history": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.urlbar.suggest.openpage": {
+        "Value": false,
+        "Status": "default"
+      },
+      "network.proxy.allow_hijacking_localhost": {
+        "Value": false,
+        "Status": "locked",
+        "//": "Ensure 127.0.0.1 requests bypass any user-configured proxy. The extension's bridge fetch depends on this."
+      },
+      "media.peerconnection.enabled": {
+        "Value": false,
+        "Status": "locked",
+        "//": "Block WebRTC entirely \u2014 even without a proxy, WebRTC fingerprints and can leak the real IP via STUN/ICE."
+      },
+      "media.navigator.enabled": {
+        "Value": false,
+        "Status": "locked"
+      },
+      "xpinstall.signatures.required": {
+        "Value": false,
+        "Status": "locked",
+        "//": "Required so the unsigned anon-layer XPI can load. The ExtensionSettings allowlist above prevents this from being abused to install other unsigned addons. The Mullvad build doesn't bake MOZ_REQUIRE_SIGNING into libxul, so this pref actually takes effect (verified)."
+      }
+    }
+  }
+}

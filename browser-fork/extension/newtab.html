@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Tab</title>
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'self';">
+<style>
+:root {
+  --bg: #0c0c0d; --fg: #e8e3d8; --muted: #6b6b6b;
+  --accent: #d4a574; --accent-dim: #8a6d4b;
+  --rule: #222;
+  --mono: "JetBrains Mono", "Cascadia Code", "Fira Code", "Courier New", monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--mono); font-size: 14px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 20px;
+}
+.lockup {
+  font-size: 36px; letter-spacing: 0.4em; margin-bottom: 32px;
+  color: var(--fg);
+}
+.bracket { color: var(--accent); }
+.wordmark { margin: 0 0.3em; }
+form {
+  display: flex; align-items: center;
+  width: 100%; max-width: 560px;
+  border: 1px solid var(--rule); border-radius: 8px;
+  background: #141416; padding: 4px;
+}
+form:focus-within { border-color: var(--accent-dim); }
+.prefix {
+  color: var(--accent); padding: 0 14px;
+  font-size: 14px;
+}
+input {
+  flex: 1; background: transparent; color: var(--fg);
+  border: 0; font-family: var(--mono); font-size: 14px;
+  padding: 10px 4px; outline: none;
+}
+input::placeholder { color: var(--muted); }
+button {
+  background: transparent; color: var(--accent-dim);
+  border: 0; font-family: var(--mono); font-size: 14px;
+  padding: 0 14px; cursor: pointer;
+}
+form:focus-within button { color: var(--accent); }
+.recent {
+  width: 100%; max-width: 560px; margin-top: 28px;
+}
+.recent-label {
+  color: var(--muted); font-size: 11px;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  text-align: center; margin-bottom: 12px;
+}
+.recent ul { list-style: none; }
+.recent li { margin: 4px 0; }
+.recent a {
+  display: block; color: var(--fg); text-decoration: none;
+  font-size: 13px; padding: 6px 12px;
+  border-left: 2px solid transparent;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.recent a:hover {
+  color: var(--accent); border-left-color: var(--accent);
+}
+.dot { color: var(--accent-dim); margin-right: 10px; }
+.foot {
+  position: absolute; bottom: 20px; left: 0; right: 0;
+  text-align: center; color: var(--muted); font-size: 10px;
+  letter-spacing: 0.2em; text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+
+<div class="lockup">
+  <span class="bracket">[</span><span class="wordmark">ANONYMOUS</span><span class="bracket">]</span>
+</div>
+
+<form id="go">
+  <span class="prefix">▸</span>
+  <input id="q" type="text"
+         placeholder="anon://&hellip;  or  search"
+         autocapitalize="off" autocorrect="off" spellcheck="false" autofocus>
+  <button type="submit">&#9166;</button>
+</form>
+
+<div class="recent">
+  <div class="recent-label">── recent ──</div>
+  <ul>
+    <li><a href="anon://pd7oljno3rdtsrtludnwesh362veu3mtawnjx6ozn7uso7gh7k4nq5ad.anon"><span class="dot">·</span>anon://demo.anon</a></li>
+    <li><a href="anon://anona4y4gpit3bbuunqhvubajjgmnvuhupka4gqibkdldpby64ujtkqd.anon"><span class="dot">·</span>anon://anonymous.anon</a></li>
+  </ul>
+</div>
+
+<div class="foot">post-quantum hidden-service network</div>
+
+<script>
+// Submit handler: if the input looks like anon://... navigate via the host
+// browser's URL bar interception (mozilla.cfg's submit-time hook redirects
+// to the bridge). For plain text, treat as a default search.
+document.getElementById('go').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const raw = document.getElementById('q').value.trim();
+  if (!raw) return;
+  let target;
+  if (/^anon:\/\//i.test(raw)) {
+    target = raw;
+  } else if (/^[a-z0-9.\-]+\.anon($|[\/:?#])/i.test(raw)) {
+    target = 'anon://' + raw;
+  } else {
+    // Default search: send to DuckDuckGo. URL bar handles routing.
+    target = 'https://duckduckgo.com/?q=' + encodeURIComponent(raw);
+  }
+  location.href = target;
+});
+</script>
+
+</body>
+</html>

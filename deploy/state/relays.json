@@ -1,0 +1,32 @@
+[
+  {
+    "//":          "relay1.anon.gratis (185.193.126.134) — FlokiNET Finland",
+    "fingerprint": "2412d7f1bff66801380ffe34fc267c5c7aee6214125fc56583d668b0918c62d6",
+    "idPk":        "4fd174d290b09e720daad898d158d7f1f012788edef05394288189ceb2d120d2",
+    "B_pk":        "1c455b66013dd31b8b848acd100cd86da417a32d0f92b4a2ca2d37553e071001",
+    "host":        "185.193.126.134",
+    "port":        443,
+    "flags":       ["GUARD", "FAST"],
+    "exit_policy": "reject"
+  },
+  {
+    "//":          "relay2.anon.gratis (80.78.18.39) — FlokiNET Finland",
+    "fingerprint": "78076a06e188535deb8cf61013ee4f1fbc31c04df7ba5c21fa1762acbbedfc4c",
+    "idPk":        "f9080a49e346d9a7dd0b8a08b3fb089ba09ebd266be703298d422a6b3ee64bc0",
+    "B_pk":        "60634dc26a7cadd1aa419b4efe2913d81caf97b383fd763ae55bf8313a29d213",
+    "host":        "80.78.18.39",
+    "port":        443,
+    "flags":       ["GUARD", "FAST"],
+    "exit_policy": "reject"
+  },
+  {
+    "//":          "relay3.anon.gratis (80.78.28.95) — FlokiNET Finland",
+    "fingerprint": "be91c34a0f5ce621bb1e65a7f4b15731064971c2a0a82a657232a6b14e1cb11b",
+    "idPk":        "c2664cd91a948ad424ef54097cfc4e5d6d7d8e5daba8f8eeb72d044802340d0a",
+    "B_pk":        "b63b8c6162bd370b1437671358a78fd361fe123b59f422667d6456c52e65be5b",
+    "host":        "80.78.28.95",
+    "port":        443,
+    "flags":       ["GUARD", "FAST"],
+    "exit_policy": "reject"
+  }
+]

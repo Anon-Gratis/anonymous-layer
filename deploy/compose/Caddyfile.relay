@@ -1,0 +1,48 @@
+# anon-layer relay Caddyfile.
+#
+# Terminates wss://${RELAY_DOMAIN}:443 and reverse-proxies to the
+# anon-node-v2 daemon's WebSocket listener. ACME (Let's Encrypt) is
+# automatic via the email in $ACME_EMAIL.
+#
+# This is the deployment workaround for spec § 11.4 (link transport
+# still uses ws://, not wss:// natively). The cell-layer encryption
+# inside the WS frames is hybrid post-quantum — TLS at the link adds
+# metadata-flow protection between relays, not anonymity itself.
+
+{
+    email {$ACME_EMAIL}
+    # Disable the default admin endpoint — no need for runtime config
+    # surface on a relay box; reduces attack surface.
+    admin off
+}
+
+{$RELAY_DOMAIN}:443 {
+    # Strict HTTPS only; HSTS for clients that revisit
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # Anon-layer link transport rides on a single WS upgrade per
+    # peer connection. Long-lived; explicit large timeouts so a slow
+    # consensus + dial-out doesn't churn connections.
+    reverse_proxy anon-node:9001 {
+        transport http {
+            versions h1
+            read_timeout 1h
+            write_timeout 1h
+            dial_timeout 30s
+        }
+    }
+
+    log {
+        # Just the connection events, not request bodies (which are
+        # opaque ws frames anyway).
+        output stdout
+        format console
+        level WARN
+    }
+}
+
+# Plain HTTP only for the ACME challenge; everything else redirects
+# to https.
+http://{$RELAY_DOMAIN} {
+    redir https://{$RELAY_DOMAIN}{uri} permanent
+}

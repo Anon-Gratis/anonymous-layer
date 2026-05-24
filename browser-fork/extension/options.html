@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anon Layer — Settings</title>
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self';">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<div class="banner-pre">⚠ PRE-AUDIT EXPERIMENTAL — not for production anonymity needs · use Tor for that</div>
+<main>
+  <h2 class="h2">Anon Layer — Settings</h2>
+
+  <p class="plain">
+    This extension renders <code>anon://</code> pages by calling a
+    local bridge (the <code>anon-browse-gui</code> Node process from
+    this repo). Point the extension at the URL the bridge prints when
+    it starts.
+  </p>
+
+  <label class="field">
+    <span class="label-text">Bridge URL (e.g. <code>http://127.0.0.1:1081</code>)</span>
+    <input id="bridgeUrl" type="url" placeholder="http://127.0.0.1:1081">
+  </label>
+
+  <label class="field">
+    <span class="label-text">Session token (32 hex chars; printed by the bridge at startup)</span>
+    <input id="bridgeToken" type="text" placeholder="leave empty if the bridge runs without a token">
+  </label>
+
+  <label class="field">
+    <span class="label-text">
+      Or paste the full bridge URL the binary prints
+      (<code>http://127.0.0.1:1081/?token=…</code>) and the extension will fill the two
+      fields above:
+    </span>
+    <div class="row">
+      <input id="pasteUrl" class="grow" type="text"
+             placeholder="http://127.0.0.1:1081/?token=…">
+      <button id="parseUrl" class="btn">Parse</button>
+    </div>
+  </label>
+
+  <div class="row" style="margin-top: 24px;">
+    <button id="save" class="btn primary">Save</button>
+    <button id="test" class="btn">Test connection</button>
+    <button id="reset" class="btn">Reset to defaults</button>
+  </div>
+
+  <div id="status" style="margin: 18px 0; padding: 10px 0;"></div>
+
+  <h3 class="h3" style="margin-top: 32px;">How to start a bridge</h3>
+  <div class="code"># From the anonymous-layer repo (replace consensus paths for your DA):
+bin/anon-browse-gui.mjs \
+  --consensus tests/consensus.bin \
+  --da-trust  tests/da-trust.txt \
+  --descriptor tests/descriptor.bin \
+  --listen 127.0.0.1 --port 1081</div>
+  <p class="plain">
+    The bridge prints a URL like <code>http://127.0.0.1:1081/?token=…</code>.
+    Paste that into the field above and click <b>Parse</b>, then <b>Save</b>.
+  </p>
+
+  <h3 class="h3" style="margin-top: 32px;">URL bar access (required for typed <code>.anon</code> addresses)</h3>
+  <p class="plain">
+    Firefox does not recognise the <code>.anon</code> TLD natively, so typing
+    <code>foo.anon</code> in the URL bar normally goes to the default search
+    engine (a privacy leak — your <code>.anon</code> hostname gets sent to
+    DuckDuckGo / Google / whoever). To intercept that and open the site through
+    this extension instead, grant the extension permission to see all
+    navigations. This is a one-time click; nothing about the data leaves your
+    machine.
+  </p>
+  <div class="row" style="margin-top: 12px;">
+    <button id="grantHostAccess" class="btn primary">Grant URL bar access</button>
+    <span id="hostAccessState" class="plain" style="margin-left: 12px;"></span>
+  </div>
+
+  <h3 class="h3">Entry points</h3>
+  <ul style="padding-left: 20px; color: var(--fg);">
+    <li>URL bar: type <code>foo.anon</code> directly (once URL bar access is granted above)</li>
+    <li>URL bar: type <code>anon foo.anon/path</code> (omnibox keyword — always works)</li>
+    <li>Toolbar icon → opens a blank renderer tab</li>
+    <li>Right-click an <code>anon://</code> link → <i>Open with Anon Layer</i></li>
+    <li>Clicking an <code>anon://</code> link on any page is intercepted</li>
+  </ul>
+</main>
+<script src="options.js"></script>
+</body>
+</html>

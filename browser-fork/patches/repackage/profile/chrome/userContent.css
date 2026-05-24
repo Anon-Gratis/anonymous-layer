@@ -1,0 +1,33 @@
+/* Anonymous Browser — in-content styling.
+ *
+ * Loaded as a USER_SHEET by mozilla.cfg. Only affects internal pages
+ * (about:blank, about:home, about:newtab, error pages). Real anon://
+ * content is rendered by the bridge HTML which has its own styles.
+ */
+
+/* Default empty pages — no flash of white, monospace. */
+@-moz-document url("about:blank"),
+               url("about:home"),
+               url("about:newtab"),
+               url("about:privatebrowsing") {
+  html, body {
+    background: #0c0c0d !important;
+    color: #e8e3d8 !important;
+    font-family: "JetBrains Mono", "Cascadia Code", "Fira Code",
+                 ui-monospace, Menlo, Consolas, monospace !important;
+  }
+  body > * {
+    color: #e8e3d8 !important;
+  }
+}
+
+/* Error/cert pages — match the dark palette. */
+@-moz-document url-prefix("about:certerror"),
+               url-prefix("about:neterror") {
+  html, body {
+    background: #0c0c0d !important;
+    color: #e8e3d8 !important;
+  }
+  h1, h2, h3 { color: #d4a574 !important; }
+  a, a:visited { color: #d4a574 !important; }
+}

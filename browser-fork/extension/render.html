@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>anon-layer</title>
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; connect-src http://127.0.0.1:* http://localhost:*; img-src 'self' data:; form-action 'none'; base-uri 'none';">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<div class="banner-pre">⚠ PRE-AUDIT EXPERIMENTAL — not for production anonymity needs · use Tor for that</div>
+<header>
+  <button id="back"   title="Back">←</button>
+  <button id="fwd"    title="Forward">→</button>
+  <button id="reload" title="Reload">↻</button>
+  <input id="url" type="text" placeholder="anon://...">
+  <button id="go" class="btn primary">Go</button>
+  <button id="opts" title="Settings">⚙</button>
+</header>
+<div id="status">ready</div>
+<main id="content"></main>
+<script type="module" src="render.js"></script>
+</body>
+</html>

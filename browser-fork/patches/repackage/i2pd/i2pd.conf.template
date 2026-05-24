@@ -1,0 +1,95 @@
+# Anon Browser — bundled i2pd configuration.
+#
+# Generated per launch from this template by the anonymous launcher
+# (browser-fork/scripts/anon-browser.launcher.sh). @@PLACEHOLDER@@
+# tokens are substituted at runtime with the per-launch values.
+#
+# Goals:
+#   - .i2p / .b32.i2p access only; no SAM bridge, no I2CP exposed
+#   - bind to loopback only; never accept external connections
+#   - run unprivileged; we're the user's own UID, not the i2pd user
+#   - leave certificates path pinned to the bundled copy
+
+# ---------- bookkeeping ----------
+
+# Per-launch state dir. Wiped + recreated each launch (poor man's
+# new-identity); persistent caching is faster but leaks history.
+datadir = @@DATA_DIR@@
+
+# Bundled reseed signing keys. Without these i2pd will refuse to
+# verify the SU3 reseed bundle and never bootstrap.
+certsdir = @@CERTS_DIR@@
+
+# Log file is followed by the splash to surface bootstrap progress.
+log = file
+logfile = @@DATA_DIR@@/i2pd.log
+loglevel = info
+
+# Run in foreground; we manage the lifecycle from the launcher.
+daemon = false
+
+# ---------- transports ----------
+
+# Listen for *outbound* peer connections on a random high port. The
+# launcher picks the port and substitutes it in; we don't want a
+# predictable port that fingerprints us.
+[ntcp2]
+enabled = true
+port = @@NTCP2_PORT@@
+
+[ssu2]
+enabled = true
+port = @@SSU2_PORT@@
+
+# Don't accept inbound peer connections. We're a client, not a relay.
+notransit = true
+
+# ---------- client proxies ----------
+
+# HTTP proxy: this is what the browser's PAC routes *.i2p through.
+# Loopback-only.
+[httpproxy]
+enabled = true
+address = 127.0.0.1
+port = @@HTTP_PROXY_PORT@@
+
+# SOCKS proxy: kept enabled for non-browser clients (curl, ssh -o
+# ProxyCommand…). Loopback-only. Not used by our PAC.
+[socksproxy]
+enabled = true
+address = 127.0.0.1
+port = @@SOCKS_PROXY_PORT@@
+
+# ---------- everything we don't want ----------
+
+# Disable the SAM bridge, BOB bridge, and I2CP — these are
+# application-bridge interfaces that we have no use for and that
+# would widen the attack surface if reachable.
+[sam]
+enabled = false
+
+[bob]
+enabled = false
+
+[i2cp]
+enabled = false
+
+# Disable UPnP — we don't accept inbound, and any UPnP punch
+# would announce our presence to the LAN router.
+[upnp]
+enabled = false
+
+# Web console — loopback only, separate port. Useful for debugging,
+# off by default to keep the surface minimal. Flip enabled=true to
+# inspect routing state at http://127.0.0.1:@@WEBCONSOLE_PORT@@/.
+[http]
+enabled = false
+address = 127.0.0.1
+port = @@WEBCONSOLE_PORT@@
+
+# ---------- bandwidth caps ----------
+#
+# We're a client + we set notransit=true, so transit caps don't apply;
+# but a low bandwidth class still signals to the network that we're
+# not a useful relay candidate.
+bandwidth = L

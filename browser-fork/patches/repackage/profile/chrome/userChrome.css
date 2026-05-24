@@ -1,0 +1,442 @@
+/* Anonymous Browser — terminal / monospace chrome.
+ *
+ * Loaded as a USER_SHEET by mozilla.cfg. Affects the browser frame
+ * (tabs, urlbar, toolbar, menus) but not page content. See
+ * userContent.css for in-content rules.
+ *
+ * Palette:
+ *   #0c0c0d  ink        — toolbar / window background
+ *   #141416  ink-soft   — urlbar / selected tab background
+ *   #1f1f22  rule       — borders
+ *   #e8e3d8  bone       — primary text
+ *   #6b6b6b  muted      — secondary text
+ *   #d4a574  amber      — focus / accent
+ *   #8a6d4b  amber-dim  — secure-state hint
+ */
+
+:root {
+  --anon-bg: #0c0c0d;
+  --anon-bg-soft: #141416;
+  --anon-rule: #1f1f22;
+  --anon-fg: #e8e3d8;
+  --anon-muted: #6b6b6b;
+  --anon-accent: #d4a574;
+  --anon-accent-dim: #8a6d4b;
+  --anon-mono: "JetBrains Mono", "Cascadia Code", "Fira Code",
+               ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* Override Firefox theme variables so the chrome inherits our palette
+ * regardless of light/dark theme detection. */
+:root,
+:root[lwt-toolbar],
+:root[lwt-popup="dark"],
+:root[lwt-popup="light"] {
+  --toolbar-bgcolor: var(--anon-bg) !important;
+  --toolbar-bgimage: none !important;
+  --toolbar-color: var(--anon-fg) !important;
+  --tab-selected-bgcolor: var(--anon-bg-soft) !important;
+  --tab-selected-textcolor: var(--anon-fg) !important;
+  --tab-line-color: var(--anon-accent) !important;
+  --urlbar-box-bgcolor: var(--anon-bg-soft) !important;
+  --urlbar-box-focus-bgcolor: var(--anon-bg-soft) !important;
+  --urlbar-box-text-color: var(--anon-fg) !important;
+  --lwt-toolbar-field-background-color: var(--anon-bg-soft) !important;
+  --lwt-toolbar-field-color: var(--anon-fg) !important;
+  --lwt-toolbar-field-focus: var(--anon-bg-soft) !important;
+  --lwt-toolbar-field-focus-color: var(--anon-fg) !important;
+  --lwt-toolbar-field-border-color: var(--anon-rule) !important;
+}
+
+/* Window background. */
+#main-window,
+#navigator-toolbox,
+#nav-bar,
+#PersonalToolbar,
+#TabsToolbar,
+#titlebar {
+  background: var(--anon-bg) !important;
+  background-image: none !important;
+  border-bottom-color: var(--anon-rule) !important;
+}
+
+#navigator-toolbox {
+  border-bottom: 1px solid var(--anon-rule) !important;
+}
+
+/* Tabs — flat, square, monospace labels. */
+.tab-background {
+  border-radius: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+}
+.tabbrowser-tab {
+  font-family: var(--anon-mono) !important;
+  font-size: 12px !important;
+  letter-spacing: 0.02em !important;
+}
+.tabbrowser-tab[selected="true"] .tab-background {
+  background: var(--anon-bg-soft) !important;
+  border-top: 1px solid var(--anon-accent) !important;
+}
+.tab-label {
+  font-family: var(--anon-mono) !important;
+  font-weight: 400 !important;
+}
+.tab-icon-image {
+  filter: grayscale(35%);
+}
+
+/* URL bar — square, monospace, amber focus ring. */
+#urlbar,
+#urlbar-input {
+  font-family: var(--anon-mono) !important;
+  font-size: 13px !important;
+  letter-spacing: 0.01em !important;
+  color: var(--anon-fg) !important;
+}
+#urlbar-background {
+  background: var(--anon-bg-soft) !important;
+  border: 1px solid var(--anon-rule) !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+#urlbar[focused="true"] > #urlbar-background {
+  border-color: var(--anon-accent) !important;
+  outline: none !important;
+}
+#urlbar[breakout][breakout-extend="true"] > #urlbar-background {
+  border-color: var(--anon-accent) !important;
+}
+
+/* Identity icon (lock pad) — amber when secure. */
+#identity-icon,
+#tracking-protection-icon {
+  fill: var(--anon-accent-dim) !important;
+}
+
+/* Toolbar buttons — flat, no rounded gloss. */
+.toolbarbutton-1 {
+  border-radius: 2px !important;
+}
+.toolbarbutton-1 > .toolbarbutton-icon {
+  border-radius: 2px !important;
+  background: transparent !important;
+}
+.toolbarbutton-1:hover > .toolbarbutton-icon,
+.toolbarbutton-1[open] > .toolbarbutton-icon {
+  background: var(--anon-bg-soft) !important;
+}
+
+/* Bookmark toolbar — match the rest. */
+#PersonalToolbar {
+  border-top: 1px solid var(--anon-rule) !important;
+}
+.bookmark-item {
+  font-family: var(--anon-mono) !important;
+  font-size: 12px !important;
+}
+
+/* Hide cruft we don't need on a privacy browser. */
+#pocket-button,
+#fxa-toolbar-menu-button,
+#sync-button,
+#whats-new-menu-button,
+#firefox-view-button {
+  display: none !important;
+}
+
+/* Menus & panels — monospace, dark. */
+menupopup,
+panel,
+panelview,
+.panel-subview-body {
+  background: var(--anon-bg) !important;
+  color: var(--anon-fg) !important;
+  font-family: var(--anon-mono) !important;
+  font-size: 12px !important;
+}
+menuitem, menu {
+  color: var(--anon-fg) !important;
+}
+menuitem[_moz-menuactive="true"],
+menuitem:hover {
+  background: var(--anon-bg-soft) !important;
+  color: var(--anon-accent) !important;
+}
+
+/* Find bar. */
+.findbar-container,
+.findbar-textbox {
+  background: var(--anon-bg) !important;
+  color: var(--anon-fg) !important;
+  font-family: var(--anon-mono) !important;
+}
+
+/* ----- All three anon toolbar buttons ----- */
+/* Force text labels to render (Firefox's icons-only toolbar mode
+ * otherwise hides .toolbarbutton-text — we need it visible since the
+ * three anon buttons are primarily text-driven). */
+#anon-security-level-button,
+#anon-new-identity-button,
+#anon-panic-button,
+#anon-volatile-button,
+#anon-onion-only-button,
+#anon-tor-status-button {
+  -moz-box-orient: horizontal !important;
+  padding: 0 8px !important;
+}
+#anon-security-level-button .toolbarbutton-text,
+#anon-new-identity-button .toolbarbutton-text,
+#anon-panic-button .toolbarbutton-text,
+#anon-volatile-button .toolbarbutton-text,
+#anon-onion-only-button .toolbarbutton-text,
+#anon-tor-status-button .toolbarbutton-text {
+  display: inline !important;
+  font-family: var(--anon-mono) !important;
+  font-size: 11px !important;
+  letter-spacing: 0.05em !important;
+  color: var(--anon-fg) !important;
+  margin-inline-start: 6px !important;
+}
+/* Panic button: red foreground to flag it as the destructive escape
+ * hatch — the user has to recognize it instantly under stress. */
+#anon-panic-button .toolbarbutton-text {
+  color: #ff5555 !important;
+  font-weight: bold !important;
+}
+#anon-panic-button:hover {
+  background-color: rgba(255, 85, 85, 0.15) !important;
+}
+/* Hide the empty icon box on buttons that have no icon — otherwise it
+ * eats horizontal padding for no reason. */
+#anon-new-identity-button .toolbarbutton-icon,
+#anon-panic-button .toolbarbutton-icon,
+#anon-volatile-button .toolbarbutton-icon,
+#anon-onion-only-button .toolbarbutton-icon,
+#anon-tor-status-button .toolbarbutton-icon {
+  display: none !important;
+}
+
+/* Onion-only ON state: green accent so it's obvious at a glance
+ * which mode you're in (vs. the dimmer "off" label). */
+#anon-onion-only-button[anon-onion-only="on"] .toolbarbutton-text {
+  color: #66ff99 !important;
+  font-weight: bold !important;
+}
+
+/* Shield icon. Embedded as a base64 SVG so we don't have to deal with
+ * URL-encoding quirks for `#` inside CSS data URIs. */
+#anon-security-level-button .toolbarbutton-icon {
+  list-style-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZDRhNTc0IiBzdHJva2Utd2lkdGg9IjEuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48cGF0aCBkPSJNOCAxLjUgTDEzLjIgMy42IFY3LjUgQzEzLjIgMTEgMTAuOSAxMy40IDggMTQuNSBDNS4xIDEzLjQgMi44IDExIDIuOCA3LjUgVjMuNiBaIi8+PC9zdmc+') !important;
+  width: 16px !important;
+  height: 16px !important;
+  -moz-context-properties: fill, stroke;
+  fill: var(--anon-accent);
+  stroke: var(--anon-accent);
+}
+/* Safer: same outline but with an amber wash filling the right half. */
+#anon-security-level-button[anon-security-level="1"] .toolbarbutton-icon {
+  list-style-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgc3Ryb2tlPSIjZDRhNTc0IiBzdHJva2Utd2lkdGg9IjEuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48cGF0aCBkPSJNOCAxLjUgTDEzLjIgMy42IFY3LjUgQzEzLjIgMTEgMTAuOSAxMy40IDggMTQuNSBWMS41IFoiIGZpbGw9IiNkNGE1NzQiLz48cGF0aCBkPSJNOCAxLjUgTDEzLjIgMy42IFY3LjUgQzEzLjIgMTEgMTAuOSAxMy40IDggMTQuNSBDNS4xIDEzLjQgMi44IDExIDIuOCA3LjUgVjMuNiBaIiBmaWxsPSJub25lIi8+PC9zdmc+') !important;
+}
+/* Safest: solid-filled shield. */
+#anon-security-level-button[anon-security-level="2"] .toolbarbutton-icon {
+  list-style-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iI2Q0YTU3NCIgc3Ryb2tlPSIjZDRhNTc0IiBzdHJva2Utd2lkdGg9IjEuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48cGF0aCBkPSJNOCAxLjUgTDEzLjIgMy42IFY3LjUgQzEzLjIgMTEgMTAuOSAxMy40IDggMTQuNSBDNS4xIDEzLjQgMi44IDExIDIuOCA3LjUgVjMuNiBaIi8+PC9zdmc+') !important;
+}
+
+/* Per-level text color: bone at Standard, amber when raised. */
+#anon-security-level-button[anon-security-level="1"] .toolbarbutton-text,
+#anon-security-level-button[anon-security-level="2"] .toolbarbutton-text {
+  color: var(--anon-accent) !important;
+}
+/* Tor status button color reflects state via an attribute. */
+#anon-tor-status-button[label^="Tor: on"] .toolbarbutton-text {
+  color: var(--anon-accent) !important;
+}
+
+/* Security-level popup styling. */
+.anon-security-level-popup {
+  background: var(--anon-bg) !important;
+  border: 1px solid var(--anon-rule) !important;
+  font-family: var(--anon-mono) !important;
+  min-width: 360px !important;
+}
+.anon-sec-header {
+  font-weight: 700 !important;
+  color: var(--anon-accent) !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  font-size: 11px !important;
+  padding: 6px 10px !important;
+}
+.anon-sec-item {
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  color: var(--anon-fg) !important;
+}
+.anon-sec-item[checked="true"] {
+  color: var(--anon-accent) !important;
+  background: var(--anon-bg-soft) !important;
+}
+.anon-sec-hint {
+  font-size: 10px !important;
+  color: var(--anon-muted) !important;
+  letter-spacing: 0.05em !important;
+  padding: 6px 12px !important;
+  font-style: italic !important;
+}
+
+/* Tor-ready pip in the urlbar — visible when :root[anon-tor="on"]. */
+:root[anon-tor="on"] #identity-box::after {
+  content: "tor:on";
+  display: inline-block;
+  font-family: var(--anon-mono);
+  font-size: 10px;
+  color: var(--anon-accent);
+  margin-inline: 6px;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+/* Suggestion popup inside the URL bar — monospace, dark. */
+.urlbarView,
+.urlbarView-row,
+.urlbarView-results {
+  background: var(--anon-bg) !important;
+  color: var(--anon-fg) !important;
+  font-family: var(--anon-mono) !important;
+  font-size: 12px !important;
+}
+.urlbarView-row[selected] {
+  background: var(--anon-bg-soft) !important;
+}
+.urlbarView-row[selected] .urlbarView-title {
+  color: var(--anon-accent) !important;
+}
+
+/* Sidebar */
+#sidebar-box, #sidebar-header {
+  background: var(--anon-bg) !important;
+  color: var(--anon-fg) !important;
+}
+
+/* Subtle: a 1px accent line under the active tab strip. */
+#TabsToolbar::after {
+  content: "";
+  display: block;
+  height: 0;
+}
+
+/* ============================================================
+   Onion-fingerprint chip — 4-square hash next to the identity-box.
+   Injected by mozilla.cfg whenever pretty-URL substitution shows an
+   anon:// host. Hidden by default; shown when anon-fp-show="true".
+   Goal: glanceable, brain pattern-matchable, NO antialiased blur,
+   so the user can compare what they remember vs. what they see.
+   ============================================================ */
+
+#anon-fp-chip {
+  display: none;
+  align-items: center;
+  margin-inline: 6px;
+}
+
+#anon-fp-chip[anon-fp-show="true"] {
+  display: inline-flex;
+}
+
+#anon-fp-chip .anon-fp-sq {
+  width: 7px;
+  height: 14px;
+  min-width: 7px;
+  margin-right: 1px;
+  border: 1px solid #000;
+  /* Solid colors only — no border-radius, no shadow — so the user's
+     eye can pattern-match the exact pixel pattern across sessions. */
+}
+
+#anon-fp-chip .anon-fp-sq:last-child {
+  margin-right: 0;
+}
+
+#anon-fp-chip:hover {
+  outline: 1px solid var(--anon-accent-dim);
+  outline-offset: 1px;
+}
+
+/* ============================================================
+   Circuit-display popup (anchored on the Tor-status button).
+   Tor-Browser style: header, descriptor line, then the rendezvous
+   and intro paths as 3 hops each. Monospace, dark, minimal chrome.
+   ============================================================ */
+
+#anon-circuit-popup {
+  --panel-background: var(--anon-bg) !important;
+  --panel-color: var(--anon-fg) !important;
+  --panel-border-color: var(--anon-accent-dim) !important;
+  --panel-padding: 0 !important;
+  font-family: var(--anon-mono) !important;
+  min-width: 380px;
+  max-width: 540px;
+}
+
+.anon-circuit-body {
+  padding: 12px 14px;
+  gap: 8px;
+}
+
+.anon-circuit-title {
+  font-size: 12px !important;
+  color: var(--anon-accent) !important;
+  letter-spacing: 0.15em !important;
+  margin: 0 0 4px 0 !important;
+  font-weight: bold;
+}
+
+.anon-circuit-status {
+  font-size: 11px !important;
+  color: var(--anon-fg) !important;
+  margin: 0 !important;
+}
+
+.anon-circuit-meta {
+  font-size: 10px !important;
+  color: var(--anon-muted, #888) !important;
+  margin: 2px 0 6px 0 !important;
+  letter-spacing: 0.04em !important;
+}
+
+.anon-circuit-sep {
+  height: 1px;
+  background: var(--anon-accent-dim);
+  opacity: 0.4;
+  margin: 4px 0;
+}
+
+.anon-circuit-row {
+  margin: 6px 0;
+  gap: 2px;
+}
+
+.anon-circuit-row-header {
+  font-size: 10px !important;
+  color: var(--anon-accent) !important;
+  letter-spacing: 0.1em !important;
+  margin: 0 0 3px 0 !important;
+  text-transform: uppercase;
+}
+
+.anon-circuit-hop {
+  font-size: 11px !important;
+  color: var(--anon-fg) !important;
+  margin: 0 !important;
+  padding: 1px 0 !important;
+  white-space: pre;
+}
+
+.anon-circuit-empty {
+  font-size: 11px !important;
+  color: var(--anon-muted, #888) !important;
+  font-style: italic !important;
+  margin: 2px 0 !important;
+}

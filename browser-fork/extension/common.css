@@ -1,0 +1,201 @@
+/* Anon Layer — shared theme for render/start/options/popup pages.
+ *
+ * The palette mirrors bin/anon-browse-gui.mjs HTML_UI so an extension
+ * tab looks the same as the side-car GUI. Keep this file in sync if
+ * either side changes.
+ */
+
+:root {
+  --bg:        #16181c;
+  --panel:     #1e2127;
+  --fg:        #e4e6eb;
+  --muted:     #8a8f99;
+  --accent:    #6cb6ff;
+  --warn:      #f5a623;
+  --danger:    #ff6b6b;
+  --ok:        #5fc97f;
+  --rule:      #2a2e35;
+  --code:      #0f1116;
+  --link-anon: #6cb6ff;
+  --link-ext:  #f5a623;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.banner-pre {
+  background: #2a2e35;
+  color: var(--muted);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  text-align: center;
+  border-bottom: 1px solid var(--rule);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+header button,
+button.btn {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+header button:hover,
+button.btn:hover { background: #2a2e35; }
+header button:disabled,
+button.btn:disabled { color: var(--muted); cursor: not-allowed; }
+button.btn.primary { background: var(--accent); color: #0a0e15; border-color: var(--accent); }
+button.btn.primary:hover { filter: brightness(1.1); }
+
+input[type=text],
+input[type=url],
+input[type=password],
+#url {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+input[type=text]:focus,
+input[type=url]:focus,
+input[type=password]:focus,
+#url:focus { outline: 2px solid var(--accent); }
+
+#url { flex: 1; }
+
+#status {
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+}
+#status.error { color: var(--danger); }
+#status.ok    { color: var(--ok); }
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 24px 80px;
+}
+
+h1.h1 {
+  font-size: 28px;
+  margin: 18px 0 12px;
+  padding-left: 12px;
+  border-left: 4px solid var(--warn);
+  color: var(--warn);
+  font-weight: 700;
+}
+h2.h2 { font-size: 20px; margin: 24px 0 8px; font-weight: 700; }
+h3.h3 { font-size: 16px; margin: 16px 0 4px; color: var(--muted); font-weight: 700; }
+
+.plain { margin: 0 0 12px; }
+.blank { height: 8px; }
+.list  { margin: 0 0 4px; padding-left: 6px; }
+.list-bullet { color: var(--ok); }
+.bq {
+  color: var(--muted);
+  border-left: 3px solid var(--rule);
+  padding: 4px 10px;
+  margin: 4px 0;
+}
+.code {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  background: var(--code);
+  padding: 8px 12px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.link { display: block; margin: 4px 0; }
+.link a {
+  color: var(--link-anon);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--link-anon);
+}
+.link a.ext {
+  color: var(--link-ext);
+  border-color: var(--link-ext);
+}
+.link a:hover { border-bottom-style: solid; }
+.link .marker {
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  margin-right: 4px;
+}
+.link .hint {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: 6px;
+  font-family: ui-monospace, monospace;
+}
+
+.error-box {
+  padding: 16px;
+  border-radius: 8px;
+  background: #341d20;
+  border: 1px solid #5a2a31;
+  color: var(--danger);
+}
+.notice-box {
+  padding: 16px;
+  border-radius: 8px;
+  background: #1f2a35;
+  border: 1px solid #2a4a6a;
+  color: var(--fg);
+}
+.notice-box a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+label.field {
+  display: block;
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+label.field > .label-text {
+  display: block;
+  margin-bottom: 4px;
+}
+label.field input { width: 100%; }
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.row > * { flex: 0 0 auto; }
+.row > .grow { flex: 1 1 auto; }

@@ -1,0 +1,73 @@
+# anon-layer DA Caddyfile.
+#
+# Serves /srv as static files over https://${DA_DOMAIN}:443. Clients
+# fetch consensus.bin on launch; relay operators occasionally curl it.
+#
+# Conservative cache headers: 60s. Consensus rebuild cadence is 1h
+# (default ANON_CONSENSUS_LIFETIME), so a 60s edge cache balances
+# load against staleness.
+
+{
+    email {$ACME_EMAIL}
+    admin off
+}
+
+{$DA_DOMAIN}:443 {
+    # Long-lived HSTS for clients that revisit
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # ─── /hsdir/<key> — HSDir (Phase 1: DA-fronted MVP, GET-only) ────
+    #
+    # Clients GET /hsdir/<base32 lookup-key> to retrieve a service's
+    # current descriptor. The DA is an OPAQUE store — it doesn't verify
+    # the body. Clients verify the hybrid signature on fetch; an
+    # attacker substituting a forged descriptor is detected at parse
+    # time. No listing; no traversal — only the well-formed key shape
+    # is accepted.
+    #
+    # Writes: publishers push to /srv/hsdir/<key> via SSH/rsync (host-
+    # level, restricted authorized_keys with permitopen). Caddy never
+    # accepts writes over HTTPS.
+    #
+    # Privacy: client → DA reveals which address was queried. Phase 1.5
+    # routes the lookup over an anon circuit via RELAY_DESCFETCH.
+    @hsdir path_regexp hsdir_path ^/hsdir/[A-Za-z0-9_-]{16,64}$
+    handle @hsdir {
+        root * /srv
+        file_server {
+            # No directory listing.
+        }
+        header Cache-Control "public, max-age=30"
+        header Content-Type "application/octet-stream"
+    }
+    @hsdir_bad path /hsdir /hsdir/ /hsdir/*
+    respond @hsdir_bad "bad or malformed hsdir key" 400
+
+    # ─── /consensus.bin and /da-trust.local.json — static files ──────
+    @docs path /consensus.bin /da-trust.local.json
+    handle @docs {
+        root * /srv
+        file_server
+        header Cache-Control "public, max-age=60"
+
+        @consensus path /consensus.bin
+        header @consensus Content-Type "application/octet-stream"
+
+        @trust path /da-trust.local.json
+        header @trust Content-Type "application/json"
+    }
+
+    # ─── / — minimal index for operator sanity ───────────────────────
+    @root path /
+    respond @root "anon-layer DA — PRE-AUDIT TESTNET. Fetch /consensus.bin, /da-trust.local.json, /hsdir/<key>.\n" 200
+
+    log {
+        output stdout
+        format console
+        level WARN
+    }
+}
+
+http://{$DA_DOMAIN} {
+    redir https://{$DA_DOMAIN}{uri} permanent
+}

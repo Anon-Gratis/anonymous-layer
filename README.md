@@ -1,83 +1,84 @@
 # ANONYMOUS LAYER
 
-> **⚠️ STATUS: PRE-AUDIT, PRE-SPEC, EXPERIMENTAL. DO NOT DEPLOY.**
+> **⚠️ STATUS: PRE-AUDIT, EXPERIMENTAL. DO NOT DEPLOY.**
 >
-> This software has not been audited. The draft protocol specification
-> ([`docs/SPEC.md`](./docs/SPEC.md)) and threat model
-> ([`docs/THREAT_MODEL.md`](./docs/THREAT_MODEL.md)) are complete to v0.1
-> draft. The reference code still implements the pre-spec design and
-> contains hand-rolled cryptographic constructions that are not yet
-> considered safe. **It must not be used by journalists,
-> dissidents, or anyone whose physical safety depends on anonymity.** For
-> safety-critical use cases today, use [Tor](https://torproject.org). The
-> current production-readiness roadmap and the list of known critical
-> issues are in [`AUDIT_PREP.md`](./AUDIT_PREP.md). For vulnerability
-> disclosure, see [`SECURITY.md`](./SECURITY.md).
+> This software has not been audited. **Two protocol versions live in
+> this repository**, both pre-audit:
+>
+> - **v0.1** — specified in [`docs/SPEC.md`](./docs/SPEC.md), implemented
+>   under `modules/{crypto,wire,peer,node}/`, runnable via `bin/anon-node.mjs`
+>   and `bin/anon-chat.mjs`. Single-hop forwarding. Suitable for known-peer
+>   chat between adults who can read the threat model. Defeats no real
+>   adversary on the open internet.
+> - **v0.2** — DRAFT specified in [`docs/SPEC-v0.2-draft.md`](./docs/SPEC-v0.2-draft.md),
+>   implementation in progress under `modules/v2/`. Multi-hop circuits +
+>   exit policy + hidden services. The spec draft has explicit open
+>   architectural questions (§ 15). Code refuses to start without an
+>   `--i-understand-this-is-experimental` flag.
+>
+> **It must not be used by journalists, dissidents, or anyone whose
+> physical safety depends on anonymity.** For safety-critical use today,
+> use [Tor](https://torproject.org). The list of known limitations
+> (including the documented v0.1 timing side-channel) is in
+> [`AUDIT_PREP.md`](./AUDIT_PREP.md). For vulnerability disclosure, see
+> [`SECURITY.md`](./SECURITY.md).
 
 ## ABOUT
 
-This project comes from the distrust towards the Tor project and the utter lack of serious competitors to it. This is an in-progress implementation of a protocol that is easy to inspect, audit and develop independent implementations of it, so you do not need to trust my software to participate in this anonymity network (as you're able to write your own). If you too are distrustful of Tor, consider supporting this project. Reach out to me for more details.
+Anonymous Layer is a from-scratch anonymity-network protocol pitched as
+an alternative to Tor. The protocol surface is intentionally small so
+the spec is auditable and independent implementations are realistic to
+develop. Both the spec and the reference code are AGPL-3.0+, and the
+authorial intent is that participating in the network should not require
+trusting any particular implementation.
+
+v0.1 provides **sender / receiver unlinkability for short messages over
+a one-hop overlay**. It does not provide circuit-level anonymity, mix-
+network traffic shaping, or anti-Sybil. See `docs/SPEC.md` § 1.2 and
+`docs/THREAT_MODEL.md` for the precise claims.
+
+## QUICKSTART
+
+```bash
+npm install
+node bin/anon-node.mjs init ./node.json
+# share fingerprint and listen address out of band, then populate
+# ./seeds.bin with the peer records you trust
+node bin/anon-node.mjs run ./node.json
+```
+
+`init` generates an Ed25519 identity (stored mode-0600 at
+`./node.identity.key`), an empty seed list, and a default config listening
+on `127.0.0.1:8443`. `info <config>` prints the node's fingerprint and
+listen address. `run` starts the listener, dials each seed, and runs
+the gossip scheduler until SIGTERM/SIGINT. `share <config>` /
+`add-seed <config> <hex>` are how operators exchange peer records out
+of band.
+
+## CHAT
+
+Once two nodes know about each other (via `share` + `add-seed`), they
+can hold an interactive conversation over the network:
+
+```bash
+node bin/anon-chat.mjs ./node.json <peer-fingerprint-hex>
+```
+
+Both sides run `anon-chat` at the same time. `anon-chat` replaces
+`anon-node run` for the duration — it listens on the same port and
+acts as both the daemon and the UI. Type lines and press Enter to
+send; Ctrl-D or Ctrl-C to exit. Each session uses a random
+conversation tag so concurrent chats can be demultiplexed by an
+application above the network layer.
+
+Try the scripted demos: `bash bench/demo-two-nodes.sh` (handshake
+only) or `bash bench/demo-chat.sh` (handshake + message exchange).
 
 ## CONTACT
 
-EMAIL: wellbehaveddemon@proton.me
-
-GPG:
-
-```
------BEGIN PGP PUBLIC KEY BLOCK-----
-
-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
-Z0dIah5qQ8BPMs82fSA=
-=39Es
------END PGP PUBLIC KEY BLOCK-----
-```
+- **Email:** `admin@anon.gratis` (PGP-encrypted for security reports per
+  [`SECURITY.md`](./SECURITY.md))
+- **Vulnerability disclosure:** see [`SECURITY.md`](./SECURITY.md).
 
 ## DONATIONS
 
@@ -88,6 +89,10 @@ Z0dIah5qQ8BPMs82fSA=
 ```
 npm test
 ```
+
+The test suite runs the unit tests, end-to-end node integration
+(in-memory + real WebSocket), property-based fuzzing of the wire
+decoders, and CLI smoke tests.
 
 ## LICENSE
 

@@ -1,0 +1,29 @@
+# Keep the docker build context small.
+# Only bin/, modules/, package.json, package-lock.json need to be shipped
+# for the relay + DA images. node_modules is reinstalled inside the
+# build via `npm ci --omit=dev`.
+
+node_modules
+dist
+browser-fork
+docs
+bench
+test-vectors
+tests.mjs
+
+.git
+.gitignore
+.github
+.vscode
+.idea
+*.md
+!deploy/**/*.md
+
+# Pre-existing build outputs
+*.tar
+*.tar.gz
+*.xz
+
+# OS noise
+.DS_Store
+Thumbs.db

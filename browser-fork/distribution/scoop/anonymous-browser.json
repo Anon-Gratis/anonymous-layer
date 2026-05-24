@@ -1,0 +1,51 @@
+{
+    "##": "Scoop manifest for Anonymous Browser. Lives in this repo; mirror to the public bucket at https://github.com/anon-gratis/scoop-anonymous on each release. Users install via:  scoop bucket add anonymous-gratis https://github.com/anon-gratis/scoop-anonymous ; scoop install anonymous-browser",
+    "version": "0.0.0-pre",
+    "description": "Anonymity-focused web browser for the Tor and anon-layer networks. Pre-audit testnet — do not rely on for life-critical anonymity.",
+    "homepage": "https://anonymous.gratis",
+    "license": {
+        "identifier": "GPL-3.0-or-later",
+        "url": "https://github.com/anon-gratis/anonymous-layer/blob/main/LICENSE"
+    },
+    "notes": [
+        "First-time setup:",
+        "  1. Copy AnonLayer\\config\\anon-browser.conf.example",
+        "       to AnonLayer\\config\\anon-browser.conf",
+        "  2. Edit DA_URLS / HSDIR_URL if you're not using the default",
+        "     pre-audit testnet directory authorities.",
+        "  3. Launch via the Start Menu (Anonymous) or run 'anonymous' from any shell.",
+        "",
+        "This is a pre-audit testnet build. Threat model + limits:",
+        "  https://github.com/anon-gratis/anonymous-layer#threat-model"
+    ],
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/anon-gratis/anonymous-layer/releases/download/v$version/anonymous-$version-windows-x86_64.zip",
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "extract_dir": "Anonymous"
+        }
+    },
+    "shortcuts": [
+        [ "anonymous.exe", "Anonymous" ]
+    ],
+    "bin": "anonymous.exe",
+    "persist": [
+        "AnonLayer\\config\\anon-browser.conf",
+        "AnonLayer\\config\\descriptors",
+        "Data"
+    ],
+    "checkver": {
+        "github": "https://github.com/anon-gratis/anonymous-layer",
+        "regex": "/releases/tag/v([\\d.\\w-]+)"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/anon-gratis/anonymous-layer/releases/download/v$version/anonymous-$version-windows-x86_64.zip"
+            }
+        },
+        "hash": {
+            "url": "$url.sha256"
+        }
+    }
+}
