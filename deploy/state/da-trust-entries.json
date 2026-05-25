@@ -1,4 +1,5 @@
 {
-  "//": "Network-wide da-trust.json — composed from each DA's individual /data/da-trust.json after it self-inits. Ships baked into the anon-browser tarball as the root of trust. Add 2 more entries (da2, da3) once those VPSes are provisioned.",
-  "e6da5beb51fa0ffb644db685f6910bc85b638c040a1eaf78883deb1f4ee79665": "7e7bced839ae4be56932c8f5c65c11da69814ae98aef69378b3832c2df22da73"
+  "//": "Network-wide da-trust.json \u2014 composed from each DA's individual /data/da-trust.json. Ships baked into the anon-browser tarball as the root of trust. 2 DAs live (da1, da2); add da3 once the 3rd VPS is provisioned.",
+  "e6da5beb51fa0ffb644db685f6910bc85b638c040a1eaf78883deb1f4ee79665": "7e7bced839ae4be56932c8f5c65c11da69814ae98aef69378b3832c2df22da73",
+  "657aefb5f23256ff421d3d63150306e98b54cf13d011744433e17f542e854303": "8533d6a4a8412d4e4273a7a2704b33d33f6d4078dec6e7b172dbcaa1d1b5d4c0"
 }
