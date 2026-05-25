@@ -43,7 +43,7 @@
     "fingerprint": "e0dffc7baed5950dcfae60c83bd865eb06f498988be5e55da9e89de1e2c4bdeb",
     "idPk": "2e6ff288724e4b8c725d90288600ad201520465608387f67075c7a77607696f7",
     "B_pk": "829f1433fd5202458631373aa7875ca32cab9be1c9e01a22638f3f58160c4033",
-    "host": "relay4.anon.gratis",
+    "host": "93.95.230.162",
     "port": 443,
     "flags": [
       "GUARD",
