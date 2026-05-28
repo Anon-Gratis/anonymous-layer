@@ -20,7 +20,7 @@
 set -euo pipefail
 
 BROWSER_ROOT="${1:?usage: fetch-i2pd-bundle.sh <BROWSER_ROOT> [VERSION]}"
-VERSION="${2:-${EXPECTED_VERSION:-2.55.0}}"
+VERSION="${2:-${EXPECTED_VERSION:-2.60.0}}"
 
 # PurpleI2P uses a single naming pattern across recent releases:
 #   i2pd_${VERSION}_x86_64_linux.tar.bz2

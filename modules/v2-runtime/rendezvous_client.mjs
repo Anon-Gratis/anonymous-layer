@@ -158,10 +158,47 @@ export const openHiddenService = async ({
 
     };
 
+    // Retry buildCircuit on transient hop-failures. The dominant
+    // failure mode in v0.x is a peer mid-handshake DESTROY (e.g. when
+    // a single relay in a 3-relay testnet rejects EXTEND because of
+    // its own path-diversity rules). Each retry calls the path-picker
+    // fresh, so a different middle/exit is likely to be tried.
+    //
+    // Transient = anything thrown by handler.beginCreate/beginExtend
+    // mid-build: peer DESTROY, EXTENDED AUTH fail, hop timeout. A
+    // higher-level error (e.g. "path must include guard/middle/exit"
+    // — bad input) won't get fixed by retrying, but those are caught
+    // separately by the path-picker before we ever get here.
+    const RETRY_LIMIT = 4;
+    const isTransientBuildError = (err) => {
+        const m = err && err.message;
+        if (!m) return false;
+        return /peer sent DESTROY|EXTENDED AUTH did not verify|hop \d+ (CREATE|EXTEND) timeout/i
+            .test(m);
+    };
+    const buildWithRetry = async ({ pickPath, onData, label }) => {
+        let lastErr;
+        for (let attempt = 0; attempt < RETRY_LIMIT; attempt++) {
+            try {
+                return await circuitBuilder.buildCircuit({
+                    path: pickPath(),
+                    onData,
+                });
+            } catch (err) {
+                lastErr = err;
+                if (!isTransientBuildError(err)) throw err;
+                logger(`${label} attempt ${attempt + 1}/${RETRY_LIMIT} failed: `
+                    + `${err.message} — retrying with a fresh path`);
+            }
+        }
+        throw lastErr;
+    };
+
     const streamsRef = { streams: null };
-    const rpBuilt = await circuitBuilder.buildCircuit({
-        path: rpPathFn({ rpRse }),
+    const rpBuilt = await buildWithRetry({
+        pickPath: () => rpPathFn({ rpRse }),
         onData: handleRpCircuitData,
+        label: 'RP circuit',
     });
     logger('client RP circuit built');
 
@@ -202,9 +239,10 @@ export const openHiddenService = async ({
         }
 
     };
-    const ipBuilt = await circuitBuilder.buildCircuit({
-        path: ipPathFn({ ipFingerprint: ipRecord.fingerprint }),
+    const ipBuilt = await buildWithRetry({
+        pickPath: () => ipPathFn({ ipFingerprint: ipRecord.fingerprint }),
         onData: handleIpCircuitData,
+        label: 'IP circuit',
     });
     logger('client IP circuit built');
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=Periodic regeneration of anon-service descriptor
+
+[Timer]
+# First fire 5 min after boot so we don't race startup; thereafter
+# every 12 h. 12 h is half the default 24 h lifetime — at any moment
+# the on-disk descriptor is < 12 h into its lifetime.
+OnBootSec=5min
+OnUnitActiveSec=12h
+# If the box was off when a fire was due, run on next boot.
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

@@ -342,8 +342,13 @@ EOF
 #   Demo descriptor + DA trust (ship the same bootstrap state Linux ships).
 [[ -f "$REPO/deploy/state/demo-service.descriptor.bin" ]] && \
     cp "$REPO/deploy/state/demo-service.descriptor.bin" "$ANON_DIR/config/descriptors/"
-[[ -f "$REPO/deploy/state/da-trust-entries.json" ]] && \
-    cp "$REPO/deploy/state/da-trust-entries.json" "$ANON_DIR/config/da-trust.json"
+if [[ -f "$REPO/deploy/state/da-trust-entries.json" ]]; then
+    # Strip the documentation "//" key — loadDaTrustSet treats every
+    # top-level key as a hex fingerprint and rejects non-hex like `//`.
+    # Same fix the Linux repackage applies; the deploy file keeps the
+    # comment for human readers, the shipped copy must be parser-clean.
+    python3 -c "import json,sys; d=json.load(open('$REPO/deploy/state/da-trust-entries.json')); d={k:v for k,v in d.items() if not k.startswith('//')}; json.dump(d, open('$ANON_DIR/config/da-trust.json','w'), indent=2)"
+fi
 
 #   App icon (used by the install + a future Windows .lnk creator).
 cp "$BRAND_GEN/icon-256.png" "$ANON_DIR/share/anon-browser.png"

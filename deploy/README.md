@@ -270,20 +270,45 @@ Take the VPS down at your leisure.
 
 ## Security hardening checklist (per VPS)
 
-- [ ] SSH: key-only, no password (`PasswordAuthentication no`).
-- [ ] `ufw` enabled (bootstrap scripts do this).
-- [ ] `unattended-upgrades` enabled for kernel/openssl/etc.
-- [ ] Root login disabled; admin via sudo account.
+### Auto-applied by `bootstrap-{da,relay}.sh`
+
+Both bootstrap scripts source [`scripts/_harden.sh`](./scripts/_harden.sh)
+and call `apply_host_hardening` after the firewall pass. Every drop-in
+lives in a namespaced `*anon*` file so re-running is idempotent and the
+operator can revert by deleting the file. Set `ANON_SKIP_HARDENING=1` to
+opt out (e.g. when cloud-init / Ansible owns the host posture).
+
+- [x] `ufw`: deny incoming except 22 + 443 (+ 80 on DA for ACME).
+- [x] `unattended-upgrades`: security pocket only, no `-updates` churn,
+      no auto-reboot. Drop-ins: `/etc/apt/apt.conf.d/{20auto-upgrades,52unattended-upgrades}-anon`.
+- [x] `fail2ban` sshd jail: 5 retries / 10 min → 1 h ban
+      (`/etc/fail2ban/jail.d/anon-sshd.conf`).
+- [x] sshd: `PermitRootLogin no`, `PasswordAuthentication no`,
+      `MaxAuthTries 3`, `LoginGraceTime 30`, no X11
+      (`/etc/ssh/sshd_config.d/10-anon.conf`). **Guarded** — refuses to
+      disable password auth unless an `authorized_keys` exists for the
+      sudo'ing user, so a fresh VPS won't lock itself out.
+- [x] sysctl: `rp_filter`, source-route / redirect deny, `tcp_syncookies`,
+      `kptr_restrict=2`, `dmesg_restrict`, `unprivileged_bpf_disabled`,
+      `protected_{hardlinks,symlinks,fifos,regular}`
+      (`/etc/sysctl.d/99-anon.conf`).
+- [x] Docker `daemon.json`: 10 MB × 5 JSON-log rotation + `live-restore`.
+      Skipped if a `daemon.json` already exists (won't clobber operator
+      customisation; logs the recommended merge instead).
+
+### Operator responsibility (cannot be auto-applied)
+
 - [ ] Off-box backup of DA secret (`/opt/anon-da/data/da-identity.bin`)
-      — encrypted, restricted access. Without it, you can't sign new
+      — encrypted, restricted access. Without it you can't sign new
       consensus and the DA is effectively dead.
 - [ ] Off-box backup of each relay's `identity.key` — without it the
       relay loses its fingerprint and is treated as a new relay
       (consensus needs updating again).
 - [ ] Monitor cert expiry — Caddy auto-renews but if the renewal cron
       fails silently, clients can't reach you.
-- [ ] Confirm Docker logs aren't filling disk
-      (`/var/lib/docker/containers/`); set log rotation if needed.
+- [ ] If the bootstrap warned that `authorized_keys` was missing,
+      finish the sshd lockdown manually after adding your key (drop
+      `10-anon.conf` from `_harden.sh`).
 
 ---
 

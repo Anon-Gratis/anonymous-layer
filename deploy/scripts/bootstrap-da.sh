@@ -20,6 +20,12 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/anon-da}"
 log() { printf '\033[36m[bootstrap-da]\033[0m %s\n' "$*"; }
 die() { printf '\033[31m[bootstrap-da]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Shared host-hardening helpers (unattended-upgrades, fail2ban, sshd,
+# sysctl, docker log-rotate). Sourced after pre-flight + firewall so
+# we know we're on Debian/Ubuntu and ufw is up.
+# shellcheck source=./_harden.sh
+. "$(dirname "$0")/_harden.sh"
+
 # ---------- 1. Pre-flight ----------
 [[ "$(id -u)" -eq 0 ]] || die "run as root (or via sudo): sudo $0"
 [[ -f /etc/os-release ]] || die "can't detect OS"
@@ -65,6 +71,13 @@ ufw allow 80/tcp   comment "ACME http-01"
 ufw allow 443/tcp  comment "consensus serve"
 ufw --force enable
 log "ufw enabled: only 22, 80, 443 inbound"
+
+# ---------- 3b. Host hardening ----------
+# unattended-upgrades (security pocket), fail2ban sshd jail, sshd
+# drop-in (key-only — guarded by authorized_keys check, won't lock
+# you out), sysctl drop-in, Docker log-rotation.
+# Skip with ANON_SKIP_HARDENING=1.
+apply_host_hardening
 
 # ---------- 4. Build image ----------
 log "building anon-da:dev image..."

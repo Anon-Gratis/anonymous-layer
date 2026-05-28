@@ -33,8 +33,11 @@
 # Refresh consensus + restart:
 #   curl -fsSL https://da1.anon.gratis/consensus.bin > config/consensus.bin
 #   docker compose -f relay.yml restart anon-node
-
-version: "3.9"
+#
+# OR set ANON_REFRESH_FROM in .env so the container polls the DA on
+# its own (every ANON_REFRESH_INTERVAL_SEC, default 1200s). On a
+# detected change the entrypoint swaps consensus.bin and restarts the
+# daemon in-place.
 
 services:
   anon-node:
@@ -49,9 +52,18 @@ services:
       ANON_BIND_HOST: 0.0.0.0
       ANON_BIND_PORT: 9001
       ANON_EXIT_POLICY: ${ANON_EXIT_POLICY:-reject}
+      # Empty/unset = manual refresh only (back-compat). Set to a
+      # comma-separated DA list to opt into in-container auto-refresh.
+      ANON_REFRESH_FROM: ${ANON_REFRESH_FROM:-}
+      ANON_REFRESH_INTERVAL_SEC: ${ANON_REFRESH_INTERVAL_SEC:-1200}
     volumes:
       - ./data:/data
-      - ./config:/etc/anon-node:ro
+      # No :ro — the entrypoint writes consensus.bin here when
+      # auto-refresh is armed. da-trust.json is never written by the
+      # container; rotating it requires operator action. Host-side
+      # ownership must allow uid 1500 to write (bootstrap-relay.sh
+      # chowns config/ accordingly).
+      - ./config:/etc/anon-node
     deploy:
       resources:
         limits:

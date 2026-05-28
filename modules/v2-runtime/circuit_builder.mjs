@@ -57,6 +57,41 @@ const createHandler = ({ circuit, onData, onDestroy, logger }) => {
     let pendingCreate = null;  // { ntorState, B_pk, ID_R, resolve, reject }
     let pendingExtend = null;  // { ntorState, B_pk, ID_R, resolve, reject }
 
+    // Inbound-cell stats — used by buildCircuit's per-hop timeout
+    // diagnostics so we can tell "guard sent nothing" from "guard sent
+    // garbage we couldn't parse" from "guard sent CREATED that failed AUTH".
+    const stats = {
+        cellsTotal: 0,
+        byCommand: new Map(),   // command code → count
+        firstAt: null,
+        lastAt: null,
+    };
+    const bumpStat = (cmd) => {
+
+        stats.cellsTotal += 1;
+        stats.byCommand.set(cmd, (stats.byCommand.get(cmd) || 0) + 1);
+        const t = Date.now();
+        if (stats.firstAt === null) stats.firstAt = t;
+        stats.lastAt = t;
+
+    };
+    const statsSnapshot = () => {
+
+        const cmds = [];
+        for (const [cmd, n] of stats.byCommand.entries()) {
+
+            cmds.push(`0x${cmd.toString(16).padStart(2, '0')}=${n}`);
+
+        }
+        return {
+            total: stats.cellsTotal,
+            commands: cmds.join(',') || '(none)',
+            firstAt: stats.firstAt,
+            lastAt: stats.lastAt,
+        };
+
+    };
+
     const failPending = (err) => {
 
         if (pendingCreate) {
@@ -111,6 +146,7 @@ const createHandler = ({ circuit, onData, onDestroy, logger }) => {
         onCell: (cell, parsed) => {
 
             if (state === 'closed') return;
+            bumpStat(parsed.command);
 
             switch (parsed.command) {
 
@@ -213,6 +249,8 @@ const createHandler = ({ circuit, onData, onDestroy, logger }) => {
 
         },
 
+        getStats: statsSnapshot,
+
     };
 
 };
@@ -243,12 +281,17 @@ export const createCircuitBuilder = ({
         const guardInfo = peerResolver({ fingerprint: path.guard.fingerprint });
         if (!guardInfo) throw new Error('guard not resolvable via consensus');
 
+        const fpHex = (fp) => Buffer.from(fp).toString('hex').slice(0, 16).toUpperCase();
+        const hop0Tag = `${guardInfo.host}:${guardInfo.port} fp=${fpHex(path.guard.fingerprint)}`;
+        logger(`hop 0 target: ${hop0Tag}`);
+
         // Open link to the entry guard (or reuse if exists).
         const entryLink = await linkManager.ensureLink({
             peerIdPk: guardInfo.idPk,
             host: guardInfo.host,
             port: guardInfo.port,
         });
+        logger(`hop 0 link established to ${hop0Tag}`);
 
         // Allocate a fresh client-side circuit_id; retry on collision
         // (which can only happen if many circuits share this entry guard).
@@ -273,6 +316,28 @@ export const createCircuitBuilder = ({
 
         };
 
+        // Wrap withTimeout so on rejection we log enough context to
+        // tell apart the common v2 failure modes (guard silent, guard
+        // sent garbage, peer DESTROYed, auth verify fail, etc).
+        const awaitHopWithDiag = async (promise, label, hopTag, extra = {}) => {
+
+            try { return await withTimeout(promise, handshakeTimeoutMs, label); }
+            catch (err) {
+
+                const s = handler.getStats();
+                const sinceFirst = s.firstAt ? `${Date.now() - s.firstAt}ms` : 'never';
+                logger(
+                    `${label} FAILED for ${hopTag}: ${err.message}`
+                    + ` | inbound cells: total=${s.total} cmds=[${s.commands}]`
+                    + ` first_inbound=${sinceFirst}`
+                    + (extra.cellsSent !== undefined ? ` | cells_sent=${extra.cellsSent}` : ''),
+                );
+                throw err;
+
+            }
+
+        };
+
         try {
 
             // --- Hop 0: direct CREATE/CREATED with the entry guard ---
@@ -283,39 +348,54 @@ export const createCircuitBuilder = ({
                 ID_R: path.guard.fingerprint,
             });
             for (const cell of begin0.cells) entryLink.sendCell(cell);
-            const hop0Keys = await withTimeout(hop0Promise, handshakeTimeoutMs, 'hop 0 CREATE');
+            const hop0Keys = await awaitHopWithDiag(
+                hop0Promise, 'hop 0 CREATE', hop0Tag,
+                { cellsSent: begin0.cells.length },
+            );
             addHop(circuit, hop0Keys);
             logger(`hop 0 keys derived (entry guard)`);
 
             // --- Hop 1: RELAY_EXTEND to middle ---
+            const middlePeer = peerResolver({ fingerprint: path.middle.fingerprint });
+            const hop1Tag = `${middlePeer ? middlePeer.host + ':' + middlePeer.port : '(unresolved)'}`
+                + ` fp=${fpHex(path.middle.fingerprint)}`;
             const ext1 = beginExtend({
                 circuit,
                 nextHopFingerprint: path.middle.fingerprint,
-                nextHopBpk: peerResolver({ fingerprint: path.middle.fingerprint }).B_pk,
+                nextHopBpk: middlePeer.B_pk,
             });
             const hop1Promise = handler.beginExtend({
                 ntorState: ext1.ntorState,
-                B_pk: peerResolver({ fingerprint: path.middle.fingerprint }).B_pk,
+                B_pk: middlePeer.B_pk,
                 ID_R: path.middle.fingerprint,
             });
             for (const cell of ext1.cells) entryLink.sendCell(cell);
-            const hop1Keys = await withTimeout(hop1Promise, handshakeTimeoutMs, 'hop 1 EXTEND');
+            const hop1Keys = await awaitHopWithDiag(
+                hop1Promise, 'hop 1 EXTEND', hop1Tag,
+                { cellsSent: ext1.cells.length },
+            );
             addHop(circuit, hop1Keys);
             logger(`hop 1 keys derived (middle)`);
 
             // --- Hop 2: RELAY_EXTEND to exit ---
+            const exitPeer = peerResolver({ fingerprint: path.exit.fingerprint });
+            const hop2Tag = `${exitPeer ? exitPeer.host + ':' + exitPeer.port : '(unresolved)'}`
+                + ` fp=${fpHex(path.exit.fingerprint)}`;
             const ext2 = beginExtend({
                 circuit,
                 nextHopFingerprint: path.exit.fingerprint,
-                nextHopBpk: peerResolver({ fingerprint: path.exit.fingerprint }).B_pk,
+                nextHopBpk: exitPeer.B_pk,
             });
             const hop2Promise = handler.beginExtend({
                 ntorState: ext2.ntorState,
-                B_pk: peerResolver({ fingerprint: path.exit.fingerprint }).B_pk,
+                B_pk: exitPeer.B_pk,
                 ID_R: path.exit.fingerprint,
             });
             for (const cell of ext2.cells) entryLink.sendCell(cell);
-            const hop2Keys = await withTimeout(hop2Promise, handshakeTimeoutMs, 'hop 2 EXTEND');
+            const hop2Keys = await awaitHopWithDiag(
+                hop2Promise, 'hop 2 EXTEND', hop2Tag,
+                { cellsSent: ext2.cells.length },
+            );
             addHop(circuit, hop2Keys);
             logger(`hop 2 keys derived (exit)`);
 

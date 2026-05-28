@@ -31,6 +31,18 @@ import { request as httpsRequest } from 'node:https';
 import { createConnection } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { writeFile, rename } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+import { queryTorCircuitForHost } from '../modules/v2-runtime/tor_controller.mjs';
+
+// Resolve where the bundled tor's runtime dir lives so the
+// /api/tor-circuit handler can authenticate to its control port.
+// Install layout: AnonLayer/bridge/bin/anon-browse-gui.mjs ─→
+//                 AnonLayer/tor/run/{torrc, data/control_auth_cookie}
+// Override via ANON_TOR_RUNTIME for dev / non-bundled runs.
+const TOR_RUNTIME_DIR = process.env.ANON_TOR_RUNTIME
+  || join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tor', 'run');
 
 import { fetchOnce } from '../modules/v2-site/client.mjs';
 import {
@@ -330,6 +342,7 @@ const buildRendezvousAcquirer = async ({
     routerHolder.router = createCellRouter({ relayDispatcher: dispatcher });
     const circuitBuilder = createCircuitBuilder({
         linkManager: linkMgr, cellRouter: routerHolder.router, peerResolver,
+        logger: (m) => log(`  [v2-build] ${m}`),
     });
 
     // hsdir client uses circuitBuilder for circuit-routed lookups —
@@ -1655,6 +1668,65 @@ const main = async () => {
                 );
                 res.writeHead(200, corsJson);
                 res.end(JSON.stringify({ error: err.message }));
+
+            }
+            return;
+
+        }
+
+        // GET /api/tor-circuit?host=<host>&token=...
+        //
+        // Returns the live Tor 3-hop circuit currently serving the
+        // given host. Talks to the bundled tor's control port via
+        // cookie auth — no extra config needed; the bridge reads
+        // torrc + control_auth_cookie from AnonLayer/tor/run.
+        //
+        // For *.onion hosts the chrome side calls this on click of
+        // the "Circuit" toolbar button. For *.anon hosts the existing
+        // /api/circuit endpoint (above) returns the anon rendezvous
+        // path instead — different transports, different shape.
+        if (path === '/api/tor-circuit') {
+
+            if (!tokenOk(url.searchParams.get('token'))) {
+
+                res.writeHead(403, corsJson);
+                res.end(JSON.stringify({ error: 'forbidden: bad session token' }));
+                return;
+
+            }
+            const host = url.searchParams.get('host');
+            if (!host) {
+
+                res.writeHead(400, corsJson);
+                res.end(JSON.stringify({ error: 'missing ?host=' }));
+                return;
+
+            }
+            try {
+
+                const fallback = url.searchParams.get('fallback') === 'latest';
+                const result = await queryTorCircuitForHost(
+                    host, TOR_RUNTIME_DIR, { fallbackToLatest: fallback },
+                );
+                if (!result) {
+                    res.writeHead(200, corsJson);
+                    res.end(JSON.stringify({
+                        error: 'no tor circuit',
+                        host,
+                        hint:  'tor has no BUILT circuits — likely still bootstrapping or this build does not route the host through tor',
+                    }));
+                    return;
+                }
+                res.writeHead(200, corsJson);
+                res.end(JSON.stringify(result));
+
+            } catch (err) {
+
+                process.stderr.write(
+                    `[bridge] /api/tor-circuit host=${host} threw: ${err.stack || err.message}\n`,
+                );
+                res.writeHead(200, corsJson);
+                res.end(JSON.stringify({ error: err.message, host }));
 
             }
             return;

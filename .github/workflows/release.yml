@@ -9,11 +9,20 @@
 #   windows-amd64 — ubuntu-latest (cross-build), repackage-mullvad-windows.sh
 #   macos-arm64   — macos-latest (Apple silicon runner), repackage-mullvad-macos.sh
 #   macos-amd64   — macos-13     (Intel runner),         repackage-mullvad-macos.sh
+#   node          — ubuntu-latest, headless source tarball
+#                   (daemons + CLI + library, no browser-fork/)
 #
-# Each job produces a .tar.xz / .zip / .dmg + matching .sha256.
+# Each browser job produces a .tar.xz / .zip / .dmg + matching .sha256;
+# the node job produces anonymous-layer-node-${VERSION}.tar.xz + .sha256.
 # The publish job collects all artifacts and (a) attaches them to the
 # tag's GitHub release, (b) writes an aggregate SHA256SUMS, and
 # (c) signs SHA256SUMS with GPG if the GPG_PRIVATE_KEY secret is set.
+#
+# publish-npm publishes the headless package to the npm registry. It
+# only runs when the NPM_TOKEN secret is set; otherwise it skips with
+# a notice. The package contents are controlled by the `files` field
+# in package.json — `browser-fork/`, `dist/`, and `node_modules/` are
+# never shipped to the registry.
 
 name: Release
 
@@ -154,11 +163,92 @@ jobs:
             dist/anonymous-*-macos-${{ matrix.arch.name }}.dmg.sha256
           if-no-files-found: error
 
+  # ---------- headless node tarball (daemons + CLI + library) ----------
+
+  build-node:
+    name: Build headless node tarball
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Resolve version from tag
+        id: ver
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            REF="${{ github.event.inputs.tag }}"
+          else
+            REF="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${REF#v}"
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::could not resolve version from tag '$REF'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved VERSION=$VERSION"
+
+      - name: Install + test before packaging
+        run: |
+          npm ci
+          # test:node skips the browser-fork extension tests — those
+          # files aren't shipped in the headless tarball or npm package.
+          npm run test:node
+
+      - name: Stamp package.json with tag version
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            pkg.version = process.env.VERSION;
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 1) + "\n");
+            console.log("stamped version =", pkg.version);
+          '
+
+      - name: Build source tarball
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          STAGE="anonymous-layer-node-${VERSION}"
+          mkdir -p "dist/${STAGE}"
+          # Headless surface only — no browser-fork, no node_modules, no dist.
+          # Mirrors the npm `files` field in package.json; keep the two in sync.
+          for path in \
+              bin modules deploy docs test-vectors \
+              package.json package-lock.json tests.mjs \
+              LICENSE README.md SECURITY.md AUDIT_PREP.md CONTRIBUTING.md; do
+            if [[ -e "$path" ]]; then
+              cp -R "$path" "dist/${STAGE}/"
+            fi
+          done
+          ( cd dist && tar --owner=0 --group=0 --numeric-owner \
+              -cJf "anonymous-layer-node-${VERSION}.tar.xz" \
+              "anonymous-layer-node-${VERSION}" )
+          rm -rf "dist/${STAGE}"
+          ( cd dist && sha256sum "anonymous-layer-node-${VERSION}.tar.xz" \
+              > "anonymous-layer-node-${VERSION}.tar.xz.sha256" )
+          ls -la dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-source
+          path: |
+            dist/anonymous-layer-node-*.tar.xz
+            dist/anonymous-layer-node-*.tar.xz.sha256
+          if-no-files-found: error
+
   # ---------- publish to GitHub release ----------
 
   publish:
     name: Publish to GitHub release
-    needs: [build-linux, build-windows, build-macos]
+    needs: [build-linux, build-windows, build-macos, build-node]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -225,3 +315,90 @@ jobs:
             release/*.sha256
             release/SHA256SUMS
             release/SHA256SUMS.asc
+
+  # ---------- publish to npm (optional — gated on NPM_TOKEN) ----------
+
+  publish-npm:
+    name: Publish headless package to npm
+    needs: [build-node]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for npm provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect npm secret presence
+        id: gate
+        run: |
+          if [[ -n "${{ secrets.NPM_TOKEN }}" ]]; then
+            echo "publish=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=0" >> "$GITHUB_OUTPUT"
+            echo "::notice::NPM_TOKEN secret not set; skipping npm publish."
+          fi
+
+      - name: Setup Node
+        if: ${{ steps.gate.outputs.publish == '1' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve version from tag
+        if: ${{ steps.gate.outputs.publish == '1' }}
+        id: ver
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            REF="${{ github.event.inputs.tag }}"
+          else
+            REF="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${REF#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install (no scripts) + test
+        if: ${{ steps.gate.outputs.publish == '1' }}
+        run: |
+          npm ci --ignore-scripts
+          npm run test:node
+
+      - name: Stamp package.json with tag version
+        if: ${{ steps.gate.outputs.publish == '1' }}
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            pkg.version = process.env.VERSION;
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 1) + "\n");
+          '
+
+      - name: Skip if version already published
+        if: ${{ steps.gate.outputs.publish == '1' }}
+        id: exists
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          # `npm view <pkg>@<version> version` prints the version if it
+          # exists, otherwise exits non-zero (or empty). Tolerate both.
+          set +e
+          PUBLISHED=$(npm view "anonymous-layer@${VERSION}" version 2>/dev/null || true)
+          set -e
+          if [[ "$PUBLISHED" == "$VERSION" ]]; then
+            echo "already=1" >> "$GITHUB_OUTPUT"
+            echo "::notice::anonymous-layer@${VERSION} already on the registry; skipping publish."
+          else
+            echo "already=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm with provenance
+        if: ${{ steps.gate.outputs.publish == '1' && steps.exists.outputs.already == '0' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # --provenance attaches a GitHub-Actions–signed attestation
+          # tying the published tarball to this workflow run. Requires
+          # id-token: write (granted above).
+          npm publish --access public --provenance

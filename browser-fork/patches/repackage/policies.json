@@ -56,6 +56,18 @@
         "Placement": "toolbar",
         "Folder": "Anonymous"
       },
+      {
+        "Title": "Pitch (@anongratis)",
+        "URL": "https://pitchprash4aqilfr7sbmuwve3pnkpylqwxjbj2q5o4szcfeea6d27yd.onion/@anongratis",
+        "Placement": "toolbar",
+        "Folder": "Anonymous"
+      },
+      {
+        "Title": "Dread (/u/anongratis)",
+        "URL": "https://dreadytofatroptsdj6io7l3xptbet6onoyno2yv7jicoxknyazubrad.onion/u/anongratis/",
+        "Placement": "toolbar",
+        "Folder": "Anonymous"
+      },
       { "Title": "PrivacyGuides",                "URL": "https://www.privacyguides.org/", "Placement": "toolbar", "Folder": "OPSEC" },
       { "Title": "EFF Surveillance Self-Defense", "URL": "https://ssd.eff.org/",           "Placement": "toolbar", "Folder": "OPSEC" },
       { "Title": "Tor Project",                  "URL": "https://www.torproject.org/",    "Placement": "toolbar", "Folder": "OPSEC" },

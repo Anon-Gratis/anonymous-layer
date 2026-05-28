@@ -7,9 +7,11 @@ See `DESIGN.md` for the full architecture, scope decisions, and phase plan.
 ## Status
 
 **Phases 1 + 2 shipped.** Boots tor + bridge (with attach-mode) and
-launches the browser on Linux. Webview-based splash UI shows consensus /
-tor / bridge progress with the amber-CRT aesthetic; falls back to
-stderr-only on headless / `--no-splash`.
+launches the browser on Linux. The connection UI now lives **inside the
+browser** (Tor-Browser-style): the launcher serves a small page on
+127.0.0.1 with the amber-CRT progress aesthetic, launches the browser
+pointed at it, runs the boot sequence concurrently, and the page
+auto-redirects to the homepage when everything is ready.
 
 Phases 3–7 (Linux-only feature parity, cross-compile, repackage
 scripts, distribution) are listed in `DESIGN.md`.
@@ -20,54 +22,24 @@ scripts, distribution) are listed in `DESIGN.md`.
 
 - An existing Anon Browser install at `~/anon-browser/` (or any
   path passed via `--install-dir`)
-- `libwebkit2gtk-4.1-0` (runtime, already shipped on Ubuntu 24.04+)
+
+No GUI toolkits or CGo libs required at runtime — the connect UI is
+HTML served from the launcher's own embedded HTTP server.
 
 ### To build from source
 
 - Go ≥ 1.23
-- `libwebkit2gtk-4.1-dev` (CGo headers for the webview splash)
-- pkg-config
-
-### Build-deps workaround on Ubuntu 24.04+
-
-`webview/webview_go` hardcodes `pkg-config --libs webkit2gtk-4.0` in
-its cgo directive, but 4.0 was dropped from Ubuntu in 24.04. Solution:
-alias `.pc` files that redirect 4.0 lookups to 4.1.
-
-```
-mkdir -p ~/.local/pkgconfig
-cat > ~/.local/pkgconfig/webkit2gtk-4.0.pc <<'EOF'
-Name: WebKit2GTK-4.0
-Description: alias for 4.1
-Version: 2.50
-Requires: webkit2gtk-4.1
-EOF
-cat > ~/.local/pkgconfig/javascriptcoregtk-4.0.pc <<'EOF'
-Name: JavaScriptCoreGTK-4.0
-Description: alias for 4.1
-Version: 2.50
-Requires: javascriptcoregtk-4.1
-EOF
-
-export PKG_CONFIG_PATH=~/.local/pkgconfig:$PKG_CONFIG_PATH
-```
-
-(Upstream issue: <https://github.com/webview/webview/issues/1115>. Will go
-away if/when the lib moves to 4.1 or adds a build tag.)
+- That's it. No CGo, no pkg-config, no WebKit headers.
 
 ## Build
 
 ```
-go build -o ./dist/anonymous ./cmd/anonymous
+CGO_ENABLED=0 go build -o ./dist/anonymous ./cmd/anonymous
 ```
 
 ### Cross-compile
 
-Two builds per non-Linux target — one with CGo (full webview splash,
-requires per-OS SDK at build time) and one without (stderr splash
-fallback, builds anywhere).
-
-**Without CGo** — works from any Linux box, no SDKs needed:
+One pure-Go build per target, works from any host:
 
 ```
 for triple in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
@@ -77,19 +49,6 @@ for triple in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; d
 done
 ```
 
-All 5 targets currently compile clean at ~8 MB each. Validated 2026-05-24.
-
-**With CGo (full splash)** — per-OS:
-
-| Target | Build host | Extra requirement |
-| --- | --- | --- |
-| linux/amd64 | local Linux | `libwebkit2gtk-4.1-dev` + the .pc shim above |
-| windows/amd64 | local Linux *or* CI | mingw-w64 toolchain + WebView2 SDK headers + cross-pkg-config |
-| darwin/amd64,arm64 | GitHub Actions `macos-latest` | n/a (Apple SDK already on runner) |
-
-Windows-with-CGo cross-compile from Linux is *possible* but painful;
-plan is to do it from a GH Actions Windows runner in Task #24 instead.
-
 ## Run
 
 ```
@@ -98,6 +57,13 @@ plan is to do it from a GH Actions Windows runner in Task #24 instead.
 
 Or drop the binary at the install root and run without `--install-dir` —
 it defaults to the directory containing itself.
+
+Flags:
+
+| Flag | Effect |
+| --- | --- |
+| `--install-dir PATH` | install root (default: dir containing the launcher binary) |
+| `--no-ui` | skip the in-browser connect page; log boot progress to stderr only |
 
 Honored env vars (same as the bash launcher):
 
@@ -117,12 +83,13 @@ Smoke test from a clean state:
 
 ```
 $ ./dist/anonymous --install-dir ~/anon-browser
-anonymous: refresh: fetching https://da1.anon.gratis/consensus.bin
-anonymous: refresh: wrote 504 bytes from ...
-anonymous: tor SOCKS: 127.0.0.1:38931
-anonymous: PAC rendered to ~/anon-browser/AnonLayer/tor/run/anon.pac
-anonymous: bridge ready on 127.0.0.1:1081
+anonymous: connect UI: http://127.0.0.1:46123/
 anonymous: browser launched
+anonymous: progress: consensus 100% — fresh
+anonymous: progress: tor      100% — ready
+anonymous: tor SOCKS: 127.0.0.1:38931
+anonymous: bridge ready on 127.0.0.1:1081
+anonymous: progress: bridge   100% — ready
 ```
 
 Shutdown is clean on SIGINT/SIGTERM — every spawned child is reaped.
@@ -131,27 +98,50 @@ bridge is already up doesn't double-spawn.
 
 ## Phase 2 → Phase 3 gap
 
-Not yet implemented (deliberately deferred per the phase plan):
+Full audit of every bash-launcher feature that hasn't landed in Go yet,
+with priority + estimated effort, lives in [FEATURE_PARITY.md](./FEATURE_PARITY.md).
 
-- i2pd start path
-- `--volatile`, `--bwrap`, `--register-app`, `--unregister-app` flags
-- /proc/self/coredump_filter hardening, NO_NEW_PRIVS
-- Swap-encryption + cloud-sync folder warnings
-- Self-heal of `policies.json` `@@INSTALL_DIR@@` and `.desktop` Icon path
-- Restart marker handshake (`$ANON_DIR/.restart`)
-- Stale-lock cleanup on `Data/*/.parentlock`
+The high-impact items still missing:
 
-These come in phase 3.
+- **Restart marker handshake** — needed for the browser's New Identity /
+  Panic / Volatile buttons to actually cycle the launcher.
+- **`--volatile` tmpfs profile** — paired with the restart marker; the
+  Panic button depends on both.
+- **i2pd start path + feeder** — gated default-off today, but required
+  to retire the bash launcher.
+- **`--register-app` / `--unregister-app`** — one-time UX, but blocks
+  first-install on a clean machine.
+- **`--bwrap` sandbox** — defense-in-depth; bash currently invokes
+  `anon-bwrap-wrap.sh`, Go needs to do the same.
+- **Linux hardening (`PR_SET_NO_NEW_PRIVS`, `PR_SET_DUMPABLE=0`)**.
+- **TTY fallback** for headless / SSH boots.
 
-## Splash backend selection
+## Connect UI architecture
 
-`splash.New()` picks at runtime:
+`internal/connectui` runs an HTTP server on `127.0.0.1:<random-port>`.
 
-| Condition | Backend |
+| Route | Purpose |
 | --- | --- |
-| `$DISPLAY` or `$WAYLAND_DISPLAY` set, webview inits OK | `webviewBackend` |
-| no display server | `logBackend` (stderr) |
-| `--no-splash` flag | `noopBackend` (silent) |
+| `GET /` | the connect page — fully server-side-rendered HTML reflecting current boot state |
+| `GET /healthz` | liveness probe |
 
-The webview backend embeds `internal/splash/index.html` via `//go:embed`
-— editing that file changes the splash UI; rebuild required.
+The page is **JavaScript-free**. It uses a `<meta http-equiv="refresh"
+content="1">` tag to repoll the server every second; each render
+reflects the latest progress events. When `Finish()` has been called
+the next render swaps in a `<meta http-equiv="refresh" content="0;
+url=<homepage>">` and the browser navigates to the homepage.
+
+This matters because Tor-Browser-style installs default to the "Safest"
+security level which globally disables JavaScript — including for
+localhost. An SSE-based design would silently hang there. Meta-refresh
+works in every security level.
+
+Localhost is DIRECT in `anon.pac`, so the page is reachable before tor
+/ bridge are up.
+
+Editing `internal/connectui/index.html` changes the UI — `go:embed`
+bundles it into the binary, so a rebuild is required.
+
+If `--no-ui` is passed (or the boot sequence can't bind a localhost
+port), the launcher falls back to logging progress to stderr; the
+browser is still launched normally.

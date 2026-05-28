@@ -9,8 +9,22 @@
   "anon-node": "bin/anon-node.mjs",
   "anon-chat": "bin/anon-chat.mjs"
  },
+ "files": [
+  "bin/",
+  "modules/",
+  "deploy/",
+  "docs/",
+  "test-vectors/",
+  "tests.mjs",
+  "LICENSE",
+  "README.md",
+  "SECURITY.md",
+  "AUDIT_PREP.md",
+  "CONTRIBUTING.md"
+ ],
  "scripts": {
   "test": "npx mocha --exit tests.mjs && node browser-fork/extension/tests-extension.mjs",
+  "test:node": "npx mocha --exit tests.mjs",
   "tests": "npm test"
  },
  "devDependencies": {

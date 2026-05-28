@@ -182,7 +182,8 @@ menuitem:hover {
 #anon-panic-button,
 #anon-volatile-button,
 #anon-onion-only-button,
-#anon-tor-status-button {
+#anon-tor-status-button,
+#anon-layer-toolbar-button {
   -moz-box-orient: horizontal !important;
   padding: 0 8px !important;
 }
@@ -191,7 +192,8 @@ menuitem:hover {
 #anon-panic-button .toolbarbutton-text,
 #anon-volatile-button .toolbarbutton-text,
 #anon-onion-only-button .toolbarbutton-text,
-#anon-tor-status-button .toolbarbutton-text {
+#anon-tor-status-button .toolbarbutton-text,
+#anon-layer-toolbar-button .toolbarbutton-text {
   display: inline !important;
   font-family: var(--anon-mono) !important;
   font-size: 11px !important;
@@ -214,8 +216,18 @@ menuitem:hover {
 #anon-panic-button .toolbarbutton-icon,
 #anon-volatile-button .toolbarbutton-icon,
 #anon-onion-only-button .toolbarbutton-icon,
-#anon-tor-status-button .toolbarbutton-icon {
+#anon-layer-toolbar-button .toolbarbutton-icon {
   display: none !important;
+}
+
+/* "Circuit" button (formerly Tor-status) — Tor-Browser-style onion glyph
+ * (concentric ellipses + sprout) followed by the "Circuit" text label.
+ * Click handler shows the circuit popup for the active tab. */
+#anon-tor-status-button .toolbarbutton-icon {
+  list-style-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZDRhNTc0IiBzdHJva2Utd2lkdGg9IjEuMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48ZWxsaXBzZSBjeD0iOCIgY3k9IjkiIHJ4PSI1IiByeT0iNS41Ii8+PGVsbGlwc2UgY3g9IjgiIGN5PSI5IiByeD0iMyIgcnk9IjMuNSIvPjxlbGxpcHNlIGN4PSI4IiBjeT0iOSIgcng9IjEiIHJ5PSIxLjUiLz48cGF0aCBkPSJNOCAzLjVWMS41Ii8+PHBhdGggZD0iTTggMkw5LjUgMC41Ii8+PC9zdmc+') !important;
+  width: 16px !important;
+  height: 16px !important;
+  display: -moz-box !important;
 }
 
 /* Onion-only ON state: green accent so it's obvious at a glance
@@ -439,4 +451,143 @@ menuitem:hover {
   color: var(--anon-muted, #888) !important;
   font-style: italic !important;
   margin: 2px 0 !important;
+}
+
+/* ============================================================
+   "SECURE — ONION" / "SECURE — ANON" / "SECURE — I2P" pill.
+
+   mozilla.cfg sets :root[anon-net] on every location change / tab
+   switch. For anonymity-network hosts we want the URL bar to say
+   the connection is SECURE — the underlying transport is end-to-end
+   authenticated (.onion key in the URL, descriptor-signed for .anon,
+   destination key for .i2p) — instead of Firefox's HTTP-only
+   "Not Secure" warning, which is technically true but misleading.
+   ============================================================ */
+
+/* 1) Suppress Firefox's default identity label and tracking-protection
+      indicators on anonymity-network sites — our pill replaces them. */
+:root[anon-net="onion"] #identity-icon-label,
+:root[anon-net="anon"]  #identity-icon-label,
+:root[anon-net="i2p"]   #identity-icon-label {
+  display: none !important;
+}
+/* The lock icon in #identity-icon: Firefox shows a slashed/open lock
+   for HTTP. Hide it; the pill carries the trust signal. */
+:root[anon-net="onion"] #identity-box[pageproxystate="valid"] #identity-icon,
+:root[anon-net="anon"]  #identity-box[pageproxystate="valid"] #identity-icon,
+:root[anon-net="i2p"]   #identity-box[pageproxystate="valid"] #identity-icon {
+  display: none !important;
+}
+
+/* 2) The pill itself — injected via ::before on #identity-box. Common
+      styling first; per-network color overrides below. The pill
+      replaces the "Not Secure" cluster horizontally — same row as the
+      URL value. */
+:root[anon-net="onion"] #identity-box::before,
+:root[anon-net="anon"]  #identity-box::before,
+:root[anon-net="i2p"]   #identity-box::before {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--anon-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  margin-inline: 4px 8px;
+  align-self: center;
+}
+
+/* 3) Per-network text + color. Tor purple for onion, the existing
+      amber for anon, sky blue for i2p. */
+:root[anon-net="onion"] #identity-box::before {
+  content: "SECURE — ONION";
+  color: #c8a8e8;          /* Tor Project's onion-violet */
+}
+:root[anon-net="anon"] #identity-box::before {
+  content: "SECURE — ANON";
+  color: #5fd1a5;          /* anon-layer mint — distinct from amber chrome */
+}
+:root[anon-net="i2p"] #identity-box::before {
+  content: "SECURE — I2P";
+  color: #87b7d7;
+}
+
+/* 4) Keep the existing `tor:on` pip from doubling up with the pill
+      on onion/anon/i2p sites — the SECURE pill already implies tor
+      (or i2p) is active. */
+:root[anon-tor="on"][anon-net="onion"] #identity-box::after,
+:root[anon-tor="on"][anon-net="anon"]  #identity-box::after,
+:root[anon-tor="on"][anon-net="i2p"]   #identity-box::after {
+  display: none !important;
+}
+
+/* ============================================================
+   Onion-Location / Anon-Location pill — chrome-level (mozilla.cfg)
+   replacement for the WebExtension pill that FF140 breaks. Sits
+   to the right of #identity-box; click navigates to the mirror.
+   ============================================================ */
+
+#anon-mirror-pill-container {
+  display: -moz-box !important;
+  -moz-box-orient: horizontal !important;
+  -moz-box-align: center !important;
+  margin-inline-start: 6px !important;
+  margin-inline-end: 6px !important;
+}
+
+.anon-mirror-pill {
+  -moz-box-orient: horizontal !important;
+  -moz-box-align: center !important;
+  padding: 2px 10px !important;
+  margin-inline: 3px !important;
+  border-radius: 999px !important;
+  color: #ffffff !important;
+  font-family: var(--anon-mono) !important;
+  font-size: 10.5px !important;
+  font-weight: bold !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  border: none !important;
+  min-height: 18px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35) !important;
+}
+.anon-mirror-pill-onion {
+  background: #7d4698 !important;   /* Tor Project onion-violet */
+}
+.anon-mirror-pill-anon {
+  background: #2d6cdf !important;   /* anon brand blue */
+}
+.anon-mirror-pill:hover {
+  filter: brightness(1.12) !important;
+}
+.anon-mirror-pill:focus-visible {
+  outline: 2px solid #ffffff !important;
+  outline-offset: 1px !important;
+}
+.anon-mirror-pill .toolbarbutton-text {
+  display: inline !important;
+  color: #ffffff !important;
+  margin-inline-start: 0 !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  letter-spacing: inherit !important;
+}
+.anon-mirror-pill .toolbarbutton-icon {
+  display: none !important;
+}
+
+/* Suppress Tor-Browser's "Your custom browser preferences have resulted
+ * in unusual security settings" yellow banner. The notification is
+ * appended to gNotificationBox by Mullvad/Tor's SecurityLevelNotification
+ * module with value="security-level-custom" — our hardening in
+ * mozilla.cfg modifies enough security-tracked prefs that the module
+ * thinks the user has drifted from a preset level. The banner is noise
+ * to our users (we picked the level for them) so we hide it. */
+notification-message[value="security-level-custom"],
+.notificationbox-stack notification[value="security-level-custom"] {
+  display: none !important;
 }

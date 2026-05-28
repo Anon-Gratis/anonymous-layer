@@ -323,8 +323,12 @@ EOF
 
 [[ -f "$REPO/deploy/state/demo-service.descriptor.bin" ]] && \
     cp "$REPO/deploy/state/demo-service.descriptor.bin" "$ANON_DIR/config/descriptors/"
-[[ -f "$REPO/deploy/state/da-trust-entries.json" ]] && \
-    cp "$REPO/deploy/state/da-trust-entries.json" "$ANON_DIR/config/da-trust.json"
+if [[ -f "$REPO/deploy/state/da-trust-entries.json" ]]; then
+    # Strip the documentation "//" key — loadDaTrustSet treats every
+    # top-level key as a hex fingerprint and rejects non-hex like `//`.
+    # Same fix the Linux + Windows repackage scripts apply.
+    python3 -c "import json,sys; d=json.load(open('$REPO/deploy/state/da-trust-entries.json')); d={k:v for k,v in d.items() if not k.startswith('//')}; json.dump(d, open('$ANON_DIR/config/da-trust.json','w'), indent=2)"
+fi
 
 cp "$REPO/browser-fork/branding/generated/icon-256.png" "$ANON_DIR/share/anon-browser.png"
 

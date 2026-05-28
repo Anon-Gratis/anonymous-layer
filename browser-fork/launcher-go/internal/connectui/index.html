@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>// ANON BROWSER</title>
+<title>// ANON BROWSER — Connecting</title>
+<meta name="referrer" content="no-referrer">
+{{if .Done}}<meta http-equiv="refresh" content="0; url={{.Homepage}}">
+{{else if .Fatal}}{{/* fatal: no refresh — stay on the error page */}}
+{{else}}<meta http-equiv="refresh" content="{{.PollSeconds}}">{{end}}
 <style>
 :root {
   --bg: #000;
@@ -11,13 +15,13 @@
   --amber-dim: rgba(212, 165, 116, 0.55);
   --amber-glow: rgba(212, 165, 116, 0.30);
   --amber-faint: rgba(212, 165, 116, 0.18);
+  --red: #e0746a;
   --mono: ui-monospace, "JetBrains Mono", "Fira Code", "Courier New", monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--bg); color: var(--amber); font-family: var(--mono); overflow: hidden; }
 body { position: relative; display: flex; align-items: center; justify-content: center; }
 
-/* Scanlines */
 body::before {
   content: "";
   position: fixed; inset: 0; pointer-events: none; z-index: 100;
@@ -25,7 +29,6 @@ body::before {
     rgba(255,255,255,0.018) 0, rgba(255,255,255,0.018) 1px,
     transparent 1px, transparent 3px);
 }
-/* Vignette */
 body::after {
   content: "";
   position: fixed; inset: 0; pointer-events: none; z-index: 99;
@@ -36,11 +39,11 @@ body::after {
 main {
   position: relative;
   z-index: 1;
-  padding: 36px 56px;
-  min-width: 480px;
+  padding: 40px 64px;
+  min-width: 560px;
+  max-width: 720px;
 }
 
-/* Corner brackets matching the rest of the app */
 .bracket {
   position: absolute;
   width: 28px; height: 28px;
@@ -55,9 +58,21 @@ header {
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.2em;
-  margin-bottom: 24px;
+  margin-bottom: 8px;
   text-shadow: 0 0 8px var(--amber-glow);
 }
+header.err { color: var(--red); }
+header.ok { color: var(--amber-bright); }
+
+.subtitle {
+  font-size: 11px;
+  color: var(--amber-dim);
+  letter-spacing: 0.15em;
+  margin-bottom: 28px;
+}
+.subtitle.err { color: var(--red); }
+.subtitle.ok { color: var(--amber-bright); text-shadow: 0 0 8px var(--amber-glow); }
+
 .cursor {
   display: inline-block;
   width: 8px; height: 14px;
@@ -72,14 +87,13 @@ header {
 .bars { display: flex; flex-direction: column; gap: 14px; }
 .bar {
   display: grid;
-  grid-template-columns: 70px 1fr 50px;
+  grid-template-columns: 90px 1fr 50px;
   gap: 14px;
   align-items: center;
   font-size: 12px;
   letter-spacing: 0.08em;
 }
 .bar .name { color: var(--amber); text-transform: uppercase; }
-.bar .label { color: var(--amber-dim); font-size: 11px; }
 .bar .pct { color: var(--amber-bright); text-align: right; font-variant-numeric: tabular-nums; }
 .bar .track {
   height: 6px;
@@ -93,14 +107,11 @@ header {
   top: 0; bottom: 0; left: 0;
   background: linear-gradient(to right, var(--amber-dim), var(--amber));
   box-shadow: 0 0 8px var(--amber-glow);
-  width: 0%;
   transition: width 240ms ease-out;
 }
-
-.row { display: contents; }
 .label-row {
   display: grid;
-  grid-template-columns: 70px 1fr 50px;
+  grid-template-columns: 90px 1fr 50px;
   gap: 14px;
   font-size: 10px;
   color: var(--amber-dim);
@@ -108,6 +119,26 @@ header {
   letter-spacing: 0.06em;
 }
 .label-row .label { grid-column: 2; }
+
+.err-detail {
+  margin-top: 24px;
+  font-size: 11px;
+  color: var(--red);
+  white-space: pre-wrap;
+  text-align: left;
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid rgba(224, 116, 106, 0.35);
+  padding: 10px 12px;
+}
+
+.hint {
+  margin-top: 24px;
+  font-size: 10px;
+  color: var(--amber-dim);
+  letter-spacing: 0.12em;
+  text-align: center;
+}
 </style>
 </head>
 <body>
@@ -116,67 +147,33 @@ header {
   <span class="bracket tr"></span>
   <span class="bracket bl"></span>
   <span class="bracket br"></span>
+  {{if .Done}}
+  <header class="ok">// CONNECTED<span class="cursor"></span></header>
+  <div class="subtitle ok">{{.Subtitle}}</div>
+  {{else if .Fatal}}
+  <header class="err">// CONNECTION FAILED</header>
+  <div class="subtitle err">{{.Subtitle}}</div>
+  {{else}}
   <header>// ANON BROWSER<span class="cursor"></span></header>
-  <div class="bars" id="bars"></div>
+  <div class="subtitle">{{.Subtitle}}</div>
+  {{end}}
+
+  <div class="bars">
+    {{range .Bars}}
+    <div class="bar">
+      <span class="name">{{.Name}}</span>
+      <div class="track"><div class="fill" style="width: {{.Pct}}%"></div></div>
+      <span class="pct">{{.Pct}}%</span>
+    </div>
+    <div class="label-row"><span class="label">{{.Label}}</span></div>
+    {{end}}
+  </div>
+
+  {{if .Fatal}}
+  <pre class="err-detail">{{.Fatal}}</pre>
+  {{else if not .Done}}
+  <div class="hint">page refreshes every {{.PollSeconds}}s · safe to wait</div>
+  {{end}}
 </main>
-<script>
-(() => {
-  // Bars are declared on the JS side; the Go layer just sends events
-  // by name. New names auto-create a row. Order of first appearance =
-  // visual order top-to-bottom.
-  const bars = new Map();
-  const container = document.getElementById('bars');
-
-  function ensureRow(name) {
-    if (bars.has(name)) return bars.get(name);
-    const row = document.createElement('div');
-    row.className = 'bar';
-    row.innerHTML =
-      '<span class="name"></span>' +
-      '<div class="track"><div class="fill"></div></div>' +
-      '<span class="pct">0%</span>';
-    row.querySelector('.name').textContent = name;
-    const labelRow = document.createElement('div');
-    labelRow.className = 'label-row';
-    labelRow.innerHTML = '<span class="label"></span>';
-    container.appendChild(row);
-    container.appendChild(labelRow);
-    const ref = {
-      row, labelRow,
-      fill: row.querySelector('.fill'),
-      pct: row.querySelector('.pct'),
-      label: labelRow.querySelector('.label'),
-      done: false,
-    };
-    bars.set(name, ref);
-    return ref;
-  }
-
-  function checkAllDone() {
-    if (bars.size === 0) return false;
-    for (const v of bars.values()) if (!v.done) return false;
-    return true;
-  }
-
-  // Exposed to Go via webview.Bind.
-  window.anonProgress = (name, pct, label) => {
-    const ref = ensureRow(name);
-    ref.fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
-    ref.pct.textContent = (pct | 0) + '%';
-    if (label) ref.label.textContent = label;
-    if (pct >= 100) {
-      ref.done = true;
-      if (checkAllDone()) {
-        // 350ms tail so the user can see the bars completed before
-        // the window dismisses.
-        setTimeout(() => { try { window.splashDone(); } catch (_) {} }, 350);
-      }
-    }
-  };
-
-  // Initial empty state so the window has visible content from frame 0.
-  ensureRow('init').label.textContent = 'starting…';
-})();
-</script>
 </body>
 </html>

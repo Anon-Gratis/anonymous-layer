@@ -173,37 +173,35 @@ cp -a "$PROD_DEPS_DIR/node_modules" "$ANON_DIR/bridge/node_modules"
 cat > "$ANON_DIR/config/anon-browser.conf.example" <<'EOF'
 # Anon Browser bridge configuration.
 #
-# Edit this file and rename to anon-browser.conf before first run.
-# The launcher reads it via `source`, so use plain shell syntax.
+# Default below: pre-audit testnet pointing at the project's three
+# directory authorities + the demo service descriptor that ships in
+# this tarball. Works as-is on first launch (cp .example anon-browser.conf
+# then ./anonymous). Edit when you want to point at your own DA set
+# or run in CONNECT mode.
 #
-# --- Option A: connect mode (single-node test / development) ---
-# Useful for kicking the tires against a single anon-node on localhost.
+# The launcher reads this via `source`, so $ANON_DIR (set by the
+# launcher to <install>/AnonLayer) expands correctly at load time —
+# the install is portable, you can rename or move the folder.
+
+# --- Pre-audit testnet defaults (rendezvous mode) ---
+DA_URLS="https://da1.anon.gratis,https://da2.anon.gratis,https://da3.anon.gratis"
+CONSENSUS="$ANON_DIR/config/consensus.bin"
+DA_TRUST="$ANON_DIR/config/da-trust.json"
+DESCRIPTOR_DIR="$ANON_DIR/config/descriptors"
+HSDIR_URL="https://da1.anon.gratis"
+ALLOW_CO_LOCATED=1
+
+# --- Alternative: connect mode (dev / single-node testing) ---
+# Comment out the rendezvous block above and uncomment below:
 # CONNECT="127.0.0.1:31000"
-#
-# --- Option B: rendezvous mode (production) ---
-# Choose a hidden service to browse via consensus + descriptor.
-# CONSENSUS=/path/to/consensus.bin
-# DA_TRUST=/path/to/da-trust.json
-#
-# Descriptor sources — set at least one. The bridge indexes every
-# descriptor by its onion address and routes per-URL host, so you can
-# browse any number of services in one session.
-# DESCRIPTOR=/path/to/single-service.descriptor.bin       # single .bin
-# DESCRIPTOR_DIR=/path/to/dir-of-descriptors              # all *.bin in dir
-# Both may be set; the bridge merges them. An unknown `.anon` host
-# returns a clean error (no silent misroute to a "default" service).
-#
-# Optional: ALLOW_CO_LOCATED=1 disables anti-correlation guards. Do not
-# set this in production unless you understand the threat model in
-# docs/THREAT_MODEL.md.
-#
+
 # --- Bundled overlay networks ---
 # Tor (for .onion) starts automatically and appears in the bootstrap
 # splash. Set ANON_DISABLE_TOR=1 to skip starting it; the PAC will
 # route *.onion to a sentinel port so the browser refuses immediately
 # rather than hanging.
-# ANON_DISABLE_TOR=0
-#
+ANON_DISABLE_TOR=0
+
 # --- i2p (EXPERIMENTAL — disabled by default) ---
 # i2pd is bundled but does not start unless you opt in below. It is
 # shipped as a preview because the current configuration has a known
@@ -213,9 +211,27 @@ cat > "$ANON_DIR/config/anon-browser.conf.example" <<'EOF'
 # tunnel isolation is configured. See docs/THREAT_MODEL.md.
 # Until then: opting in is fine for testing, but do not rely on .i2p
 # routing for anything sensitive.
-# ANON_DISABLE_I2P=1   # set to 0 to opt in to the experimental i2p stack
+ANON_DISABLE_I2P=1   # set to 0 to opt in to the experimental i2p stack
 EOF
 cp "$REPO/browser-fork/extension/icons/icon-256.png" "$ANON_DIR/share/anon-browser.png" 2>/dev/null || true
+
+# Ship the pre-audit testnet bootstrap state so the example conf
+# works out-of-the-box. The launcher's fetch_consensus() will pull
+# a fresh consensus.bin from DA_URLS on first launch — but we still
+# need the descriptor (so the demo service can be reached) and the
+# DA trust set (so the bridge can verify the consensus signature).
+mkdir -p "$ANON_DIR/config/descriptors"
+if [[ -f "$REPO/deploy/state/da-trust-entries.json" ]]; then
+    # Strip the documentation "//" key — loadDaTrustSet treats every
+    # top-level key as a hex fingerprint and rejects non-hex like `//`.
+    # The deploy file keeps the comment for human readers; the shipped
+    # copy must be parser-clean.
+    python3 -c "import json,sys; d=json.load(open('$REPO/deploy/state/da-trust-entries.json')); d={k:v for k,v in d.items() if not k.startswith('//')}; json.dump(d, open('$ANON_DIR/config/da-trust.json','w'), indent=2)"
+fi
+if [[ -f "$REPO/deploy/state/demo-service.descriptor.bin" ]]; then
+    cp "$REPO/deploy/state/demo-service.descriptor.bin" \
+       "$ANON_DIR/config/descriptors/demo-service.descriptor.bin"
+fi
 
 # ---------- 5. apply policies + user.js ----------
 
@@ -277,8 +293,17 @@ if [[ -d "$TOR_SRC" ]]; then
     cp "$TOR_SRC/torrc.template"      "$BROWSER_ROOT/AnonLayer/tor/etc/torrc.template"
     cp "$TOR_SRC/anon.pac.template"   "$BROWSER_ROOT/AnonLayer/tor/etc/anon.pac.template"
     log "     wrote $BROWSER_ROOT/AnonLayer/tor/etc/{torrc,anon.pac}.template"
+    # Auto-fetch the Tor Expert Bundle by default; skippable with
+    # SKIP_FETCH_BUNDLES=1 for offline builds. Without the binary,
+    # .onion access is silently broken in the shipped tarball.
     if [[ ! -x "$BROWSER_ROOT/AnonLayer/tor/bin/tor" ]]; then
-        log "     NOTE: AnonLayer/tor/bin/tor not present — run scripts/fetch-tor-bundle.sh"
+        if [[ "${SKIP_FETCH_BUNDLES:-0}" == "1" ]]; then
+            log "     NOTE: SKIP_FETCH_BUNDLES=1 → leaving tor unbundled (run scripts/fetch-tor-bundle.sh later)"
+        else
+            log "     fetching Tor Expert Bundle (set SKIP_FETCH_BUNDLES=1 to opt out)"
+            "$REPO/browser-fork/scripts/fetch-tor-bundle.sh" "$BROWSER_ROOT" \
+                || die "fetch-tor-bundle.sh failed; pass SKIP_FETCH_BUNDLES=1 if you intentionally want to skip"
+        fi
     fi
 fi
 
@@ -291,8 +316,19 @@ if [[ -d "$I2PD_SRC" ]]; then
     mkdir -p "$BROWSER_ROOT/AnonLayer/i2pd/etc"
     cp "$I2PD_SRC/i2pd.conf.template" "$BROWSER_ROOT/AnonLayer/i2pd/etc/i2pd.conf.template"
     log "     wrote $BROWSER_ROOT/AnonLayer/i2pd/etc/i2pd.conf.template"
+    # i2pd is disabled by default in anon-browser.conf.example (because
+    # of the unlinkability gap documented in THREAT_MODEL.md), so
+    # leaving the binary out is safe — the launcher won't try to start
+    # it. Still try to fetch by default so opt-in users have it ready,
+    # but tolerate failures (don't die).
     if [[ ! -x "$BROWSER_ROOT/AnonLayer/i2pd/bin/i2pd" ]]; then
-        log "     NOTE: AnonLayer/i2pd/bin/i2pd not present — run scripts/fetch-i2pd-bundle.sh"
+        if [[ "${SKIP_FETCH_BUNDLES:-0}" == "1" ]]; then
+            log "     NOTE: SKIP_FETCH_BUNDLES=1 → leaving i2pd unbundled"
+        else
+            log "     fetching i2pd portable bundle (best-effort)"
+            "$REPO/browser-fork/scripts/fetch-i2pd-bundle.sh" "$BROWSER_ROOT" \
+                || log "     i2pd fetch failed (non-fatal — disabled by default)"
+        fi
     fi
 fi
 

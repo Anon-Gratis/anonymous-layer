@@ -1,0 +1,97 @@
+<!--
+  Drop-in replacement for the "DOWNLOAD COMING SOON" button on
+  anonymous.gratis/browser. Three buttons (Linux + Windows live,
+  macOS still pending). Adjust CSS class names to match whatever
+  the rest of the live site uses; the structural HTML is what
+  matters.
+
+  Tested URLs (return HTTP 200 right now):
+    https://github.com/Anon-Gratis/anonymous-layer/releases/latest/download/anonymous-0.0.0-alpha-linux-x86_64.tar.xz
+    https://github.com/Anon-Gratis/anonymous-layer/releases/latest/download/anonymous-0.0.0-alpha-windows-x86_64.zip
+-->
+<div class="downloads">
+  <a class="dl-btn"
+     href="https://github.com/Anon-Gratis/anonymous-layer/releases/latest/download/anonymous-0.0.0-alpha-linux-x86_64.tar.xz">
+    ↓ Download &nbsp;·&nbsp; <span class="dl-os">Linux</span>
+    <span class="dl-meta">.tar.xz · 136 MB</span>
+  </a>
+
+  <a class="dl-btn"
+     href="https://github.com/Anon-Gratis/anonymous-layer/releases/latest/download/anonymous-0.0.0-alpha-windows-x86_64.zip">
+    ↓ Download &nbsp;·&nbsp; <span class="dl-os">Windows</span>
+    <span class="dl-meta">.zip · 173 MB</span>
+  </a>
+
+  <span class="dl-btn dl-soon" aria-disabled="true">
+    Coming soon &nbsp;·&nbsp; <span class="dl-os">macOS</span>
+    <span class="dl-meta">.dmg (arm64 + amd64)</span>
+  </span>
+
+  <p class="dl-verify">
+    Verify: <a href="https://github.com/Anon-Gratis/anonymous-layer/releases/tag/v0.0.1-pre">SHA256 + release notes</a>
+  </p>
+</div>
+
+<style>
+/* If your site already has its own button styles, delete this <style>
+   block and just use whatever existing class names you have. */
+.downloads {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+  margin: 24px 0;
+  font-family: ui-monospace, "JetBrains Mono", "Courier New", monospace;
+}
+.dl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 22px;
+  border: 1px solid #d4a574;
+  color: #d4a574;
+  text-decoration: none;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 160ms, color 160ms, box-shadow 160ms;
+}
+.dl-btn:hover {
+  background: #d4a574;
+  color: #000;
+  box-shadow: 0 0 14px rgba(212, 165, 116, 0.30);
+}
+.dl-btn .dl-os {
+  color: inherit;
+  letter-spacing: 0.05em;
+}
+.dl-btn .dl-meta {
+  margin-top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  opacity: 0.65;
+  font-weight: 400;
+}
+.dl-btn.dl-soon {
+  cursor: not-allowed;
+  opacity: 0.5;
+  border-color: rgba(212, 165, 116, 0.4);
+}
+.dl-btn.dl-soon:hover {
+  background: transparent;
+  color: #d4a574;
+  box-shadow: none;
+}
+.dl-verify {
+  margin: 8px 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+  text-align: center;
+}
+.dl-verify a {
+  color: rgba(212, 165, 116, 0.7);
+  border-bottom: 1px dotted currentColor;
+  text-decoration: none;
+}
+</style>

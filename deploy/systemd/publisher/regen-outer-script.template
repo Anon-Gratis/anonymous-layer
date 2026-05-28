@@ -1,0 +1,57 @@
+#!/bin/bash
+# anon-outer-descriptor-regen — re-issue the outer hidden-service
+# descriptor for a docker-based anon-service publisher.
+#
+# Reads the current IP fingerprint from the existing descriptor.bin
+# (preserves continuity for clients holding cached lookups) and runs
+# `anon-service init` inside the publisher container to mint a new
+# descriptor with publishEpoch=now. Then bounces the container so
+# `publish` reloads the file, and triggers anon-hsdir-upload so the
+# DA's HSDir sees the new bytes immediately rather than waiting for
+# the next upload-timer fire.
+#
+# Substitute the *_PLACEHOLDER tokens at install time.
+
+set -euo pipefail
+
+CONTAINER=__CONTAINER_PLACEHOLDER__     # e.g. anon-publisher-anona4y4
+DATA_DIR=__DATA_DIR_PLACEHOLDER__       # host path mounted at /data in the container
+LIFETIME_SECONDS=${LIFETIME_SECONDS:-86400}
+HSDIR_UPLOAD_UNIT=${HSDIR_UPLOAD_UNIT:-anon-hsdir-upload.service}
+
+DESC="$DATA_DIR/descriptor.bin"
+[ -f "$DESC" ] || { echo "regen: $DESC missing" >&2; exit 1; }
+
+# Recover the current intro point so we can re-use it. Parse inside
+# the container so the descriptor.mjs imports (@noble/curves etc.)
+# resolve against the bundled node_modules instead of needing them
+# on the host. The descriptor file is the same path inside (/data)
+# and outside the container (the bind-mounted host dir).
+IP_FP=$(docker exec "$CONTAINER" node --input-type=module -e "
+import { readFile } from 'node:fs/promises';
+import { parseServiceDescriptorAny } from '/app/modules/v2/descriptor.mjs';
+const b = await readFile('/data/descriptor.bin');
+const d = parseServiceDescriptorAny(new Uint8Array(b));
+if (!d || !d.introPoints || !d.introPoints.length) {
+    process.stderr.write('regen: cannot parse descriptor or no intro points\\n');
+    process.exit(1);
+}
+process.stdout.write(Buffer.from(d.introPoints[0].fingerprint).toString('hex'));
+")
+
+echo "regen: container=$CONTAINER ip_fp=${IP_FP:0:16}..."
+
+docker exec "$CONTAINER" node /app/bin/anon-service.mjs init \
+    --data-dir /data \
+    --ip-fingerprint "$IP_FP" \
+    --consensus /cfg/consensus.bin \
+    --da-trust /cfg/da-trust.json \
+    --lifetime-seconds "$LIFETIME_SECONDS"
+
+echo "regen: bouncing $CONTAINER"
+docker restart "$CONTAINER" >/dev/null
+
+if [ -n "$HSDIR_UPLOAD_UNIT" ]; then
+    echo "regen: triggering $HSDIR_UPLOAD_UNIT"
+    systemctl start "$HSDIR_UPLOAD_UNIT" || true
+fi

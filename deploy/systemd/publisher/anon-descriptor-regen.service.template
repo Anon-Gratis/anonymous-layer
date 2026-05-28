@@ -1,0 +1,11 @@
+[Unit]
+Description=Regenerate anon-service descriptor (refresh publishEpoch)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=__SCRIPT_PATH_PLACEHOLDER__
+# Don't fail the unit on a single transient hiccup — the timer will
+# retry on its next fire.
+SuccessExitStatus=0 1

@@ -1,0 +1,48 @@
+#!/bin/bash
+# anon-inner-descriptor-regen — re-issue a hidden-service descriptor
+# for a host-based (non-docker) anon-service publisher.
+#
+# Reads the current IP fingerprint from the existing descriptor.bin
+# and runs `anon-service init` directly on the host to mint a new
+# descriptor with publishEpoch=now. Then restarts the publisher
+# systemd unit so the publish process reloads.
+#
+# Substitute the *_PLACEHOLDER tokens at install time.
+
+set -euo pipefail
+
+NODE=${NODE:-/usr/bin/node}
+ANON_SERVICE_MJS=__ANON_SERVICE_MJS_PLACEHOLDER__   # e.g. /opt/anon-site/anonymous-layer/bin/anon-service.mjs
+DATA_DIR=__DATA_DIR_PLACEHOLDER__                   # e.g. /opt/anon-inner/data
+CONSENSUS=__CONSENSUS_PLACEHOLDER__                 # e.g. /opt/anon-inner/config/consensus.bin
+DA_TRUST=__DA_TRUST_PLACEHOLDER__                   # e.g. /opt/anon-inner/config/da-trust.json
+PUBLISHER_UNIT=__PUBLISHER_UNIT_PLACEHOLDER__       # e.g. anon-inner-publisher.service
+LIFETIME_SECONDS=${LIFETIME_SECONDS:-86400}
+
+MODULES_DIR="$(dirname "$ANON_SERVICE_MJS")/../modules"
+DESC="$DATA_DIR/descriptor.bin"
+[ -f "$DESC" ] || { echo "regen: $DESC missing" >&2; exit 1; }
+
+IP_FP=$("$NODE" --input-type=module -e "
+import { readFile } from 'node:fs/promises';
+import { parseServiceDescriptorAny } from '$MODULES_DIR/v2/descriptor.mjs';
+const b = await readFile('$DESC');
+const d = parseServiceDescriptorAny(new Uint8Array(b));
+if (!d || !d.introPoints || !d.introPoints.length) {
+    process.stderr.write('regen: cannot parse descriptor or no intro points\\n');
+    process.exit(1);
+}
+process.stdout.write(Buffer.from(d.introPoints[0].fingerprint).toString('hex'));
+")
+
+echo "regen: data=$DATA_DIR ip_fp=${IP_FP:0:16}..."
+
+"$NODE" "$ANON_SERVICE_MJS" init \
+    --data-dir "$DATA_DIR" \
+    --ip-fingerprint "$IP_FP" \
+    --consensus "$CONSENSUS" \
+    --da-trust "$DA_TRUST" \
+    --lifetime-seconds "$LIFETIME_SECONDS"
+
+echo "regen: restarting $PUBLISHER_UNIT"
+systemctl restart "$PUBLISHER_UNIT"

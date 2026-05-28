@@ -2,8 +2,8 @@
 
 Replaces `browser-fork/scripts/anon-browser.launcher.sh` with a single
 cross-platform Go binary that boots the anon-layer stack (tor + i2pd +
-bridge), presents a splash UI, and exec's the bundled Firefox-fork
-browser.
+bridge), surfaces boot progress inside the browser itself
+(Tor-Browser-style), and exec's the bundled Firefox-fork browser.
 
 ## Goals
 
@@ -13,9 +13,9 @@ browser.
    `.desktop` paths, stale-lock cleanup, etc.
 2. **Native binaries for Linux / Windows / macOS** built from one
    codebase with `GOOS=… GOARCH=… go build`.
-3. **No CGo** in the main path — keeps cross-compilation trivial. The
-   only CGo dep is the splash webview lib (see below), and that's
-   built per-target on the target.
+3. **No CGo, anywhere** — the connect UI is HTML served from an
+   embedded HTTP server, not a native window. Cross-compilation is
+   `CGO_ENABLED=0 GOOS=… GOARCH=… go build`.
 4. **No regression vs. bash** — anyone running `./anonymous` today
    should see identical behavior after the swap, except the launcher
    binary name differs.
@@ -46,7 +46,7 @@ browser-fork/launcher-go/
 │   ├── i2pd/                  i2pd binary + conf render + readiness
 │   ├── bridge/                bridge spawn / attach / health probe
 │   ├── browser/               find engine launcher, exec, restart marker
-│   ├── splash/                webview window + feeder protocol
+│   ├── connectui/             localhost HTTP server + embedded connect page + tor-log feeder
 │   ├── volatile/              tmpfs profile dir lifecycle
 │   ├── desktop/               --register-app / --unregister-app (Linux)
 │   ├── selfheal/              policies.json + .desktop path rewrites,
@@ -58,9 +58,10 @@ browser-fork/launcher-go/
 │   ├── pac/                   PAC template render
 │   ├── bwrap/                 bubblewrap wrapper (Linux-only)
 │   └── platform/              build-tagged OS shims (paths, integration)
-└── splash-ui/
-    └── index.html             single-page splash, served to webview
 ```
+
+The connect-page HTML lives at `internal/connectui/index.html`, bundled
+into the binary via `//go:embed`.
 
 ## Platform abstraction
 
@@ -97,7 +98,7 @@ type ManagedProcess struct {
     LogPath     string
     ReadyCheck  func(ctx context.Context) error  // poll for readiness
     GracePeriod time.Duration                    // SIGTERM grace
-    ProgressCh  chan<- splash.Event              // for splash feeder
+    ProgressCh  chan<- connectui.Event           // for connect UI feeder
 }
 ```
 
@@ -107,32 +108,62 @@ Lifecycle: `Start()` → `WaitReady(ctx)` → caller proceeds → on shutdown
 A central `Supervisor` owns all `ManagedProcess` instances and is the
 single thing the signal handler talks to. On SIGINT/SIGTERM/SIGHUP it
 calls `Supervisor.Shutdown(ctx)` which tears down in reverse-start
-order (browser → bridge → i2pd → tor → splash) with a 10s overall
+order (browser → bridge → i2pd → tor → connectui) with a 10s overall
 budget before everything gets SIGKILL.
 
 The bridge's **attach mode** (the recently-added feature) is modeled as
 a `ManagedProcess` with `Cmd == nil` — `Start()` does the `/api/health`
 probe and `Stop()` is a no-op (we didn't spawn it, we don't kill it).
 
-## Splash architecture
+## Connect-UI architecture (Tor-Browser-style)
 
-One HTML page, served by an embedded webview window via
-[webview/webview_go](https://github.com/webview/webview_go) (uses
-WebKitGTK / WebView2 / WebKit, ~5MB binary overhead, no Chromium
-bundle).
+There is no native splash window. The launcher stands up an HTTP
+server on `127.0.0.1:<random-port>`, launches the browser pointed at
+`http://127.0.0.1:<port>/`, then runs the boot sequence concurrently.
 
-- The Go launcher binds a JS function `anonProgress(name, pct, label)`
-  exposed to the webview.
-- Each feeder goroutine (`internal/splash/feed_tor.go`,
-  `feed_i2pd.go`, `feed_bridge.go`) tails the same logs the bash
-  version did and calls the bound function via `webview.Dispatch`.
-- The HTML is the same amber-CRT aesthetic as the new-tab page — three
-  progress bars stacked vertically inside a corner-bracket frame.
-- When all three feeders hit 100, the splash window auto-closes.
+The connect page is **JavaScript-free** — it uses a `<meta
+http-equiv="refresh">` polling tag and the server fully renders the
+current state into HTML on each GET. This is deliberate: Tor-Browser
+installs default to the "Safest" security level which disables JS
+globally (including for localhost), so an SSE/JS-driven design would
+hang silently. Meta-refresh works in every security level and gracefully
+degrades to a static page if the user disables it via Firefox's
+`accessibility.blockautorefresh` pref.
 
-Fallback: if `webview` fails to init (e.g., no display server), drop to
-a TUI splash via [bubbletea](https://github.com/charmbracelet/bubbletea)
-in the controlling terminal. Same three-bar layout, just text.
+```
+launcher                                 browser
+   │                                        │
+   ├─ listen 127.0.0.1:<rand>               │
+   ├─ exec firefox http://127.0.0.1:<rand>/ ┤
+   │                                        ├─ GET / → page (state @ t=0)
+   ├─ runBoot(): consensus → tor → bridge   │
+   │  └─ Server.Update(...) (stores state)  │
+   │                                        ├─ GET / → page (state @ t=1) ← meta-refresh
+   │                                        ├─ GET / → page (state @ t=2)
+   │                                        ├─ …
+   └─ runBoot done: Server.Finish() ────────┤
+                                            ├─ GET / → page with 0s refresh to homepage
+                                            └─ navigates to homepage
+```
+
+- `internal/connectui/server.go` owns the HTTP listener and the in-memory
+  state (insertion-ordered map of bar name → latest event).
+- `internal/connectui/index.html` is a Go `html/template` rendered on
+  each GET. Same amber-CRT aesthetic — three progress bars (consensus
+  / tor / bridge) inside a corner-bracket frame, with the fill widths
+  injected as inline `style="width: N%"`. Embedded via `//go:embed`.
+- `internal/connectui/feed_tor.go` tails `tor.log` for `Bootstrapped N%`
+  lines and calls `Server.Update("tor", pct, label)`.
+- The PAC file already routes `127.0.0.1` to DIRECT, so the connect
+  page is reachable before tor or the bridge are up.
+
+Refresh cadence is 1s. Faster would smooth the UX but burn more CPU
+on slow boot sequences; slower would make the bars feel laggy.
+
+Fallback: `--no-ui` skips the HTTP server and logs progress to stderr;
+the browser still launches normally and lands on the configured
+homepage. Headless (no `$DISPLAY`) is the browser's problem, not the
+launcher's — the connect server is always safe to run.
 
 ## Config format
 
@@ -188,23 +219,15 @@ go build -o ../../dist-launcher/linux-amd64/anonymous ./cmd/anonymous
 GOOS=windows GOARCH=amd64 \
   go build -o ../../dist-launcher/windows-amd64/anonymous.exe ./cmd/anonymous
 
-# macOS (must build on a Mac because webview has CGo deps on Darwin)
-# CI: GitHub Actions macos-latest runner
-GOOS=darwin GOARCH=arm64 \
+# macOS (any host — no CGo)
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 \
   go build -o ../../dist-launcher/darwin-arm64/anonymous ./cmd/anonymous
-GOOS=darwin GOARCH=amd64 \
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 \
   go build -o ../../dist-launcher/darwin-amd64/anonymous ./cmd/anonymous
 ```
 
-Note on the webview lib: it uses CGo. Linux cross-builds work because
-WebKitGTK headers are available in standard Ubuntu containers. Windows
-cross-builds from Linux need mingw + the WebView2 SDK headers — doable
-but annoying. macOS cross-builds from anywhere other than macOS are
-not realistic (Apple SDKs). So:
-
-- Linux launcher → built locally or in a Linux CI runner
-- Windows launcher → built in an Ubuntu CI runner with mingw + WebView2 SDK
-- macOS launcher → built on GitHub Actions macos-latest
+All targets cross-compile cleanly from a single Linux host with
+`CGO_ENABLED=0`. No per-OS SDKs, no mingw, no WebKitGTK headers.
 
 ## Testing
 
@@ -222,7 +245,12 @@ not realistic (Apple SDKs). So:
 | Phase | Deliverable | ETA |
 | --- | --- | --- |
 | 1 | MVP Go launcher, Linux only, no splash, no Linux-only extras (bwrap/volatile/register-app). Replaces ~60% of bash. | ~3 days |
-| 2 | Splash UI via webview, with feeders matching bash protocol | ~3 days |
+| 2 | In-browser connect UI (HTTP + SSE), with feeders matching bash protocol | ~3 days |
+
+Phase 3 work-items (i2pd, --volatile, --bwrap, --register-app,
+hardening, restart marker, TTY fallback, swap/cloud-sync warnings) are
+broken out per-feature with priority + effort in
+[FEATURE_PARITY.md](./FEATURE_PARITY.md).
 | 3 | All Linux-only features (bwrap, volatile, register-app, hardening, swap warning, restart marker, self-heal) | ~3 days |
 | 4 | Cross-compile + smoke-test Windows + macOS launcher binaries | ~2 days |
 | 5 | `repackage-mullvad-windows.sh` building from Linux, Scoop manifest | ~3 days |

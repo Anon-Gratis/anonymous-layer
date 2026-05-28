@@ -28,7 +28,14 @@ FROM node:20-alpine
 # openssl = used by modules/v2-runtime/self_signed_cert.mjs to mint
 #          the link-transport TLS cert (SPEC § 11.1) on first run.
 #          ~3 MB; small price to skip vendoring a JS X.509 builder.
-RUN apk add --no-cache tini openssl
+# curl   = entrypoint pulls fresh consensus from the DA(s) when
+#          ANON_REFRESH_FROM is set.
+# netcat-openbsd = HEALTHCHECK uses `nc -z` to TCP-probe the listener.
+#          Alpine's busybox includes nc by default, but the OpenBSD
+#          netcat is what the healthcheck below was written for; the
+#          busybox stub is missing some option-parsing variants we
+#          rely on across image rebuilds.
+RUN apk add --no-cache tini openssl curl netcat-openbsd
 
 # Non-root user — relay daemon doesn't need privileges, and a
 # compromised relay process shouldn't be able to write outside /data.

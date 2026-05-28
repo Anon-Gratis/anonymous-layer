@@ -23,6 +23,26 @@
 > [`AUDIT_PREP.md`](./AUDIT_PREP.md). For vulnerability disclosure, see
 > [`SECURITY.md`](./SECURITY.md).
 
+## START HERE
+
+Pick the entry point that matches what you want to do:
+
+- **End user — just want to browse?** Download the bundled browser at
+  [anonymous.gratis/browser](https://anonymous.gratis/browser). Nothing
+  else in this repo is needed.
+- **Relay operator or hidden-service host?** This repository is for
+  you. Read [`deploy/README.md`](./deploy/README.md) for the testnet
+  operator lifecycle, then run
+  [`deploy/scripts/bootstrap-relay.sh`](./deploy/scripts/bootstrap-relay.sh)
+  on a fresh VPS. The headless software (daemons, CLI, library) is
+  also summarized at [anonymous.gratis/node](https://anonymous.gratis/node).
+- **Developer / writing a second implementation?** Start with
+  [`docs/SPEC.md`](./docs/SPEC.md) (v0.1, frozen) and
+  [`docs/SPEC-v0.2-draft.md`](./docs/SPEC-v0.2-draft.md) (in progress,
+  open architectural questions in § 15). The reference library lives
+  under [`modules/`](./modules/); the daemons under [`bin/`](./bin/)
+  are thin shells over it.
+
 ## ABOUT
 
 Anonymous Layer is a from-scratch anonymity-network protocol pitched as

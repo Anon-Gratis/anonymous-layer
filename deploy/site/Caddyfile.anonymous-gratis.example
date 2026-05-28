@@ -1,0 +1,104 @@
+# Caddyfile for `anonymous.gratis` — the project's marketing /
+# distribution site (NOT a DA or relay; those live under anon.gratis
+# and use deploy/compose/Caddyfile.da | Caddyfile.relay).
+#
+# What this serves:
+#   /                  → redirect to /browser/ (change to your real
+#                        landing page if you have one)
+#   /browser, /browser/  → browser-fork/distribution/website/browser.html
+#   /node,    /node/     → browser-fork/distribution/website/node.html
+#   /protocol, /operators, /developers → 302 → /node/
+#   /fdroid/repo/*       → the self-hosted F-Droid repo (see
+#                          [[reference_fdroid_publish]])
+#
+# Splice mode: if anonymous.gratis already has a Caddyfile, copy the
+# @browser, @node, and @aliases handler blocks into your existing
+# https site block. The route blocks are independent of the rest.
+#
+# Layout assumed on the VPS:
+#   /srv/anonymous.gratis/
+#     ├── browser.html
+#     ├── node.html
+#     ├── snippet-download-buttons.html   (optional, embedded by CMS)
+#     └── fdroid/
+#         └── repo/...
+# Sync the two HTML files up via rsync from
+# browser-fork/distribution/website/ on every release.
+
+{
+    email {$ACME_EMAIL}
+    admin off
+}
+
+anonymous.gratis, www.anonymous.gratis {
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # Canonicalize www → apex
+    @www host www.anonymous.gratis
+    redir @www https://anonymous.gratis{uri} permanent
+
+    root * /srv/anonymous.gratis
+
+    # ─── /browser — end-user browser download page ───────────────────
+    # Matches /browser, /browser/, /browser/index.html. Serves
+    # browser.html. Update this file from CI after each tag push via
+    # `scripts/refresh-browser-page-checksums.sh` (or the python
+    # variant in browser-fork/distribution/website/refresh-browser-page.py).
+    @browser path /browser /browser/ /browser/index.html
+    handle @browser {
+        rewrite * /browser.html
+        file_server
+        header Cache-Control "public, max-age=300"
+        header Content-Type  "text/html; charset=utf-8"
+    }
+
+    # ─── /node — headless protocol / daemons / CLI / library page ────
+    # The analog of "the Tor package" page (vs. /browser which is
+    # "Tor Browser"). Aimed at relay operators, hidden-service hosts,
+    # and developers writing second implementations.
+    @node path /node /node/ /node/index.html
+    handle @node {
+        rewrite * /node.html
+        file_server
+        header Cache-Control "public, max-age=300"
+        header Content-Type  "text/html; charset=utf-8"
+    }
+
+    # ─── /protocol, /operators, /developers — aliases for /node ──────
+    # 302 (not 301) so we can repoint these later without poisoning
+    # client caches.
+    @aliases path /protocol /protocol/ /operators /operators/ /developers /developers/
+    redir @aliases /node/ 302
+
+    # ─── /fdroid/repo — self-hosted F-Droid repository ───────────────
+    # Long cache: fdroid publishes are signed and idempotent; the
+    # client validates each download. See [[reference_fdroid_publish]].
+    @fdroid path /fdroid/* /fdroid
+    handle @fdroid {
+        file_server browse
+        header Cache-Control "public, max-age=3600"
+    }
+
+    # ─── / — landing ─────────────────────────────────────────────────
+    # Default: send root traffic to the browser page. If you have a
+    # real index.html (a hand-written landing page), replace this
+    # block with `handle / { rewrite * /index.html; file_server }`.
+    @root path /
+    redir @root /browser/ 302
+
+    # Everything else — static under /srv/anonymous.gratis, no
+    # directory listing. 404 if missing.
+    handle {
+        file_server
+    }
+
+    log {
+        output stdout
+        format console
+        level WARN
+    }
+}
+
+http://anonymous.gratis, http://www.anonymous.gratis {
+    redir https://anonymous.gratis{uri} permanent
+}
